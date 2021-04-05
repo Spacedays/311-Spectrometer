@@ -6,6 +6,7 @@ See the Software notes document for background information
 
 #define DEBUG
 #define STATUS_PRINTING
+#define CONFIG_PRINTING
 #define CHARGE_PUMP     // configures the charge pump to be ON if defined
 //#define DEBUG_PIXEL
 //#define DEBUG_ADC
@@ -59,20 +60,8 @@ byte test;
 uint_least8_t cameraState = 0;  // 0 = asleep, 1 = active
 
 void setup() {
-  
-  Serial.begin(9600);
-  #ifdef STATUS_PRINTING
-    Serial.println(F("Initializing"));
-  #endif 
-  Serial.end();
-  
   pinMode(switchPin, INPUT);
   pinMode(PWR_DOWN, OUTPUT); // HIGH --> power down (sleep) mode
-  #ifdef CHARGE_PUMP
-    pinMode(DATA_RDY, OUTPUT); // Turns on charge pump @ start if high, signals there is another frame yet to be read out afterwards
-  #else
-    pinMode(DATA_RDY, INPUT);
-  #endif     
   pinMode(CLR_DATA, OUTPUT); // active high, rising edge trigger
   pinMode(SHUTTER, OUTPUT);
   pinMode(CLR_PIX, OUTPUT); // rising edge trigger
@@ -81,56 +70,17 @@ void setup() {
   pinMode(ADC_DATA, INPUT);
   pinMode(ADC_CLK, OUTPUT);
   
-  // PINMODE AND SETUP FOR NOT USING ADC 
-  //pinMode(A1,INPUT);
-
-  // Charge Pump on
-  #ifdef CHARGE_PUMP
-    digitalWrite(DATA_RDY, HIGH);
-  #endif
-
-  // defaults
   digitalWrite(PWR_DOWN, HIGH);     // chip off
-  digitalWrite(CLR_DATA, LOW);
-  digitalWrite(CLR_PIX, LOW);
-  digitalWrite(READ, LOW);
-  digitalWrite(ADC_CS, HIGH);       // ADC not selected
-
-  //digitalWrite(SHUTTER, LOW);
   
-  //digitalWrite(ADC_CLK, HIGH);
-
-  delay(10);  // Sensor startup time
+  runConfig();
+  adcStart();
+  flushBuffer();
   
-  #ifdef CHARGE_PUMP
-    digitalWrite(DATA_RDY, LOW);    // config should be done
-    pinMode(DATA_RDY, INPUT);       // 
-  #endif
-  
-  Serial.begin(9600);
-  
-  #ifdef STATUS_PRINTING
-    Serial.println(F("Starting SPI\n"));
-  #endif
- 
-  SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE3));     // Clock polarity = 1, CLK Phase = 1, data output on the falling edge
-  
-  #ifdef STATUS_PRINTING
-    Serial.println(F("About to call readPixel()\n"));
-  #endif
-  test = readPixel();  // wake adc
-  SPI.endTransaction();
-  
-  #ifdef STATUS_PRINTING
-    Serial.print(F("Dummy ADC Read with result of "));
-    Serial.println(test, BIN);
-  #endif
-  
-  lastFlush = millis();
-  epcSleep();
+  //epcSleep();
   buttonState = digitalRead(switchPin);     // Read button
-  checkReady("end of Setup()");
+  checkReady(F("end of Setup()"));
   
+  // DEBUGGING
   epcWake();
   delay(10000);
   epcSleep();
@@ -139,23 +89,28 @@ void setup() {
 void loop() {
   //if(!Serial){Serial.begin(9600);}
 
-  // flush check
-  if (millis()-lastFlush > T_PERIOD_FLUSH) 
+  if (millis()-lastFlush > T_PERIOD_FLUSH)  // flush check
   { 
     flushBuffer();
-    /*
-    #ifdef DEBUG
-      Serial.println(F("Flushed"));
-    #endif */
   }
-  // end flush check
 
   buttonRead = digitalRead(switchPin);           // read the button
   readButton();       // updates buttonResult 
   if (Serial.available() > 0)
   {
     test = Serial.read(); // read incoming byte
-    if (test == '0') 
+
+    if (test == 'W') 
+    {
+      Serial.println(F("Waking up"));
+      epcWake();
+    }    
+    else if (test == 'S') 
+    {
+      Serial.println(F("Going to sleep"));
+      epcSleep();
+    }
+    else if (test == '0') 
     {
       Serial.println(F("Checking Ready status:"));
       checkReady(F("terminal"));
@@ -247,21 +202,23 @@ void capture(long exposure) // exposure time [us]
   delayMicroseconds(T_SHIFT*2);
 }
 
-// If DATA_RDY is HIGH, reads from sensor, STATUS_PRINTING results
+// If DATA_RDY is HIGH, reads from sensor; STATUS_PRINTING results
+// calls readPixel() if DATA_RDY, calls epcSleep() if not
 bool readPicture()//int picture[]) // pass by reference
 {
-  Serial.end();
-  resetSerialPins();
-  bool Rdy = digitalRead(DATA_RDY);;
-  /*while (LOW == digitalRead(DATA_RDY)){ //(micros() - lastFlush < T_CDS) {} // ensure time to shift to stored pixels has passed
+  while(micros() - lastFlush < T_CDS){}// ensure time to shift to stored pixels has passed
+
+  bool Rdy = isDataReady();
+  /*while (!isDataReady() ){
   //Rdy = digitalRead(DATA_RDY);
   #ifdef DEBUG
     Serial.println(F("DATA_RDY reading LOW"));
     //Serial.println(String(Rdy));
   #endif
-  } */
+  }
+   */
   Serial.begin(9600);
-  if (!Rdy) 
+  if (!Rdy)
   {
     epcSleep();
     Serial.println(F("Data ready is low. returned False.\n"));
@@ -299,8 +256,8 @@ bool readPicture()//int picture[]) // pass by reference
   return true;
 }
 
-// WIP
-uint_least8_t readPixel() // Read 1 byte from adc
+// currently returns 8-BIT INT
+uint_least8_t readPixel() // take 1 ADC reading
 {
   #ifdef DEBUG_PIXEL
     Serial.println(F("Reading pix"));
@@ -325,29 +282,11 @@ uint_least8_t readPixel() // Read 1 byte from adc
   //return analogRead(A1);
 }
 
-void epcSleep() 
-{
-  digitalWrite(PWR_DOWN, HIGH);
-  delay(5);      // just for good measure.
-}
-
-void epcWake() 
-{
-  Serial.end();
-  resetSerialPins();
-  delayMicroseconds(10);
-  digitalWrite(PWR_DOWN, LOW);
-  delayMicroseconds(T_WAKE_UP);
-  Serial.begin(9600);
-}
-
 
 void checkReady(String input) 
 {
   #ifdef STATUS_PRINTING
-    Serial.end();
-    resetSerialPins();
-    bool test = digitalRead(DATA_RDY);
+    bool test = isDataReady();
     Serial.begin(9600);
     Serial.print(F("Cam has DATA_RDY status "));
     Serial.print(String(test));
@@ -405,8 +344,95 @@ void printPicture()
   }
 }
 
-void resetSerialPins()
+void epcSleep() 
 {
-  digitalWrite(DATA_RDY, LOW);    // config should be done
-  pinMode(DATA_RDY, INPUT);       // 
+  digitalWrite(PWR_DOWN, HIGH);
+  delay(5);      // just for good measure.
+  cameraState = 0;
+}
+
+// Wake up chip; calls runConfig and isDataReady()
+void epcWake() 
+{
+  runConfig();
+  delayMicroseconds(10);
+  digitalWrite(PWR_DOWN, LOW);
+  delayMicroseconds(T_WAKE_UP);
+  Serial.begin(9600);
+  cameraState = 1;
+}
+
+// EPC Configuration (including DATA_RDY for charge pump). does NOT touch power pins
+void runConfig()
+{
+  #ifdef CONFIG_PRINTING
+    Serial.end();
+    Serial.begin(9600);
+    Serial.println(F("Initializing Sensor"));
+  #endif 
+  Serial.end();
+  
+  #ifdef CHARGE_PUMP
+    pinMode(DATA_RDY, OUTPUT); // Turns on charge pump @ start if high, signals there is another frame yet to be read out afterwards
+  #else
+    pinMode(DATA_RDY, INPUT);
+  #endif     
+  
+  // PINMODE AND SETUP FOR NOT USING ADC 
+  //pinMode(A1,INPUT);
+
+  // Charge Pump on
+  #ifdef CHARGE_PUMP
+    digitalWrite(DATA_RDY, HIGH);
+  #endif
+
+  // defaults
+  digitalWrite(CLR_DATA, LOW);
+  digitalWrite(CLR_PIX, LOW);
+  digitalWrite(READ, LOW);
+  digitalWrite(ADC_CS, HIGH);       // ADC not selected
+
+  //digitalWrite(SHUTTER, LOW);
+  //digitalWrite(ADC_CLK, HIGH);
+
+  delay(10);  // Sensor startup time
+  
+  #ifdef CHARGE_PUMP
+    digitalWrite(DATA_RDY, LOW);    // config should be done
+    pinMode(DATA_RDY, INPUT);       // 
+  #endif
+  
+  Serial.begin(9600);
+  
+  lastFlush = millis();
+}
+
+// Assumes Serial is started; calls readPixel()
+void adcStart()
+{
+  #ifdef CONFIG_PRINTING
+    Serial.println(F("Starting SPI for Dummy Read\n"));
+  #endif
+ 
+  SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE3));     // Clock polarity = 1, CLK Phase = 1, data output on the falling edge
+  
+  #ifdef CONFIG_PRINTING
+    Serial.println(F("About to call readPixel()"));
+  #endif
+  test = readPixel();  // wake adc
+  SPI.endTransaction();
+  
+  #ifdef STATUS_PRINTING
+    Serial.print(F("Startup Dummy ADC Read with result of "));
+    Serial.println(test, BIN);
+  #endif
+}
+
+// Ends serial, resets & reads DATA_RDY pin
+bool isDataReady()
+{
+  Serial.end();
+  digitalWrite(DATA_RDY, LOW);
+  pinMode(DATA_RDY, INPUT);
+  return digitalRead(DATA_RDY);   // HIGH ==> ready
 }
