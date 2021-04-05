@@ -42,4 +42,40 @@ void readPicture(int picture[]) // pass by reference
     picture[i] = readADC();
   }
 }
-// OLD bit-banging readPicture
+
+// Button reading from main loop
+/*
+  currentButtonTime = millis();             // waiting to read the button requires a time comparison
+  if (currentButtonTime - previousButtonTime > buttonInterval) // compare button refresh time
+  {
+    previousButtonTime = currentButtonTime;                 // update previousButtonTime
+    
+    if (buttonRead == digitalRead(switchPin))               // verify two reads are the same
+    {        
+      if (buttonRead != buttonState)                          // Button State has changed!
+      {
+        buttonState = buttonRead;                               // Update button state
+        #ifdef DEBUG_BUTTON
+          Serial.println(F("Button Changed"));
+        #endif
+        if (buttonRead == LOW)                                    // if button has been RELEASED
+        {                        
+          if(currentButtonTime - buttonPressStart < 1000) {buttonResult = 1;}        // button has been pressed for < 1s
+          else{buttonResult = 2;}
+        }
+        else                                                      // button has been PRESSED
+        {
+          buttonResult = 0;
+          buttonPressStart = millis();
+        }
+        #ifdef DEBUG_BUTTON
+          Serial.println(buttonResult);
+          Serial.println();
+        #endif
+      }
+      else {buttonResult = 0;}                                // Button State has not changed; do nothing in the switch statement
+      
+    }
+  } 
+  // end button logic
+  */

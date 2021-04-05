@@ -14,9 +14,9 @@ void loop()
     // print values in an offset, downward facing parabola with the max of 4096 at i = 512, or the 513th "pixel" of the sensor
     //pic[int(i)]  = int(-0.015625*sq(i-512)+4096);
     x = int(-0.015625*sq(i-512)+4096);
-    Serial.print(x);  // send value
-    Serial.write(13);  // carriage return
-    Serial.write(10);  // linefeed
+    Serial.println(x);  // send value
+    //Serial.write(13);  // carriage return
+    //Serial.write(10);  // linefeed
   }
   //Serial.println(F("\nPrinting Values\n"));
 
