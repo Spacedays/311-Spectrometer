@@ -1,19 +1,22 @@
 /*
 See the Software notes document for background information
 */
+#include <Arduino.h>
 #include "EPC901_Reader.h"
 #include <SPI.h>
 
 #define DEBUG
-#define STATUS_PRINTING
-#define CONFIG_PRINTING
-#define CHARGE_PUMP     // configures the charge pump to be ON if defined
+//#define STATUS_PRINTING
+//#define CONFIG_PRINTING
+#define CHARGE_PUMP // configures the charge pump to be ON if defined
 //#define DEBUG_PIXEL
 //#define DEBUG_ADC
 
+#define NOP __asm__ __volatile__ ("nop\n\t")
+
 // Variable Declarations
 
-const unsigned int switchPin = 7;    // button pin
+const unsigned int switchPin = 7; // button pin
 // Breakout Pins
 const uint_least8_t PWR_DOWN = 0;
 const uint_least8_t DATA_RDY = 1;
@@ -22,8 +25,8 @@ const uint_least8_t SHUTTER = 3;
 const uint_least8_t CLR_PIX = 4;
 const uint_least8_t READ = 9;
 const uint_least8_t ADC_CS = 10;
-const uint_least8_t ADC_DATA = 12;//50; // also MISO
-const uint_least8_t ADC_CLK = 13; //52;  // ADC clock. AKA SCLK
+const uint_least8_t ADC_DATA = 12; //50; // also MISO
+const uint_least8_t ADC_CLK = 13;  //52;  // ADC clock. AKA SCLK
 const uint_least8_t VIDEO_P = A0;
 const uint_least8_t VIDEO_N = A1;
 
@@ -31,9 +34,9 @@ const uint_least8_t VIDEO_N = A1;
 // UNO clock speed: 8MHz --> 1 Arduino cycle = 125 ns; 1 arduino cycle ~~ 4.5 EPC cycles
 const uint_least8_t T_STARTUP = 10; // ms
 const uint_least8_t T_WAKE_UP = 12; // us
-const uint_least16_t T_FLUSH = 889; // us; 30 - 32 EPC cycles ;
-const uint_least16_t T_CDS = 1028;  // us; 37 EPC cycles
-const uint_least16_t T_SHIFT = 722; // us; 24-26 EPC cycles
+const uint_least16_t T_FLUSH = 1;   //889; // us; 30 - 32 EPC cycles ;
+const uint_least16_t T_CDS = 2;     //1028;  // us; 37 EPC cycles
+const uint_least16_t T_SHIFT = 1;   //722; // us; 24-26 EPC cycles
 // T_SHUTTER =  // > 5 EPC clock c-ycles.
 
 const uint_least8_t T_PERIOD_FLUSH = 90; // ms; Should be performed < 100ms ;CLR_PIX pulse should be done frequently
@@ -54,12 +57,14 @@ bool buttonState;
 uint_least8_t buttonResult = 0; // 0 = no change, 1 = pressed < 1s (with debounce), 2 = pressed > 1s
 
 // Misc
-uint_least8_t picture[1024];
-bool success;       // Flag for camera success
+const unsigned int picsize = 128;
+uint16_t picture[picsize];
+bool success; // Flag for camera success
 byte test;
-uint_least8_t cameraState = 0;  // 0 = asleep, 1 = active
+uint_least8_t cameraState = 0; // 0 = asleep, 1 = active
 
-void setup() {
+void setup()
+{
   pinMode(switchPin, INPUT);
   pinMode(PWR_DOWN, OUTPUT); // HIGH --> power down (sleep) mode
   pinMode(CLR_DATA, OUTPUT); // active high, rising edge trigger
@@ -69,58 +74,113 @@ void setup() {
   pinMode(ADC_CS, OUTPUT);
   pinMode(ADC_DATA, INPUT);
   pinMode(ADC_CLK, OUTPUT);
-  
-  digitalWrite(PWR_DOWN, HIGH);     // chip off
-  
+
+  digitalWrite(PWR_DOWN, HIGH); // chip off
+
   runConfig();
   adcStart();
   flushBuffer();
-  
+
   //epcSleep();
-  buttonState = digitalRead(switchPin);     // Read button
+  buttonState = digitalRead(switchPin); // Read button
   checkReady(F("end of Setup()"));
-  
+
   // DEBUGGING
-  epcWake();
-  delay(10000);
-  epcSleep();
+  for (int j = 0; j < 10; j++)
+  {
+    Serial.end();
+    pinMode(DATA_RDY, INPUT);
+    delay(100);
+    epcWake();
+    bool earlyRdy = digitalRead(DATA_RDY);
+    capture(1000);
+    bool Rdy = digitalRead(DATA_RDY);
+    int numMicros = 0;
+    for (int i = 1; i < 1000 && !Rdy; i++)
+    {
+      Rdy = digitalRead(DATA_RDY);
+      delayMicroseconds(1);
+      numMicros = i;
+    }
+
+    bool captured = readPicture();
+
+    delay(10);
+
+    bool stillRdy = digitalRead(DATA_RDY);
+
+    delay(10);
+    Serial.begin(9600);
+    Serial.println(F("End Debug: "));
+    if (earlyRdy)
+    {
+      Serial.println(F("Prematurely ready"));
+    }
+
+    if (Rdy)
+    {
+      Serial.print(F("Ready after "));
+      Serial.print(numMicros);
+      Serial.println(F(" microseconds!"));
+    }
+    else
+    {
+      Serial.println(F("not ready :("));
+    }
+
+    if (captured)
+    {
+      Serial.println(F("Image captured"));
+      printPicture();
+    }
+
+    if (stillRdy)
+    {
+      Serial.println(F("Sensor indicates data not read"));
+    }
+
+    delay(5000);
+
+    epcSleep();
+  }
 }
 
-void loop() {
+void loop()
+{
   //if(!Serial){Serial.begin(9600);}
 
-  if (millis()-lastFlush > T_PERIOD_FLUSH)  // flush check
-  { 
+  if (millis() - lastFlush > T_PERIOD_FLUSH) // flush check
+  {
     flushBuffer();
   }
 
-  buttonRead = digitalRead(switchPin);           // read the button
-  readButton();       // updates buttonResult 
+  buttonRead = digitalRead(switchPin); // read the button
+  readButton();                        // updates buttonResult
   if (Serial.available() > 0)
   {
     test = Serial.read(); // read incoming byte
 
-    if (test == 'W') 
+    if (test == 'W')
     {
       Serial.println(F("Waking up"));
       epcWake();
-    }    
-    else if (test == 'S') 
+    }
+    else if (test == 'S')
     {
       Serial.println(F("Going to sleep"));
       epcSleep();
     }
-    else if (test == '0') 
+    else if (test == '0')
     {
       Serial.println(F("Checking Ready status:"));
       checkReady(F("terminal"));
     }
-    else if (test == '1') 
+    else if (test == '1')
     {
       Serial.println(F("Calling readPicture()"));
       readPicture();
     }
-    else if (test == '2') 
+    else if (test == '2')
     {
       Serial.println(F("Calling epcWake() -> capture(1000) -> readPicture() -> epcSleep()"));
       epcWake();
@@ -128,7 +188,7 @@ void loop() {
       readPicture();
       epcSleep();
     }
-    else if (test == '3') 
+    else if (test == '3')
     {
       Serial.println(F("Calling epcSleep() -> capture(1000) -> readPicture() -> epcWake()"));
       epcWake();
@@ -137,40 +197,42 @@ void loop() {
       epcSleep();
     }
   }
-  
-  switch (buttonResult) {
-    case 1: // single press < 1s
-      #ifdef DEBUG
-        Serial.println(F("Taking a picture"));
-      #endif
-      checkReady(F("While asleep in case 1"));
-      epcWake();  // includes delays
-      capture(1000);
-      //if(success)                   // If the camera can be read, read the picture
-      //{
-      #ifdef STATUS_PRINTING
-        Serial.print(F("readPicture() called:\t"));
-      #endif
-      readPicture();    
-      epcSleep();
-      //printPicture(picture);
-      break;
-      
-    case 2: // single press > 1s
-      #ifdef DEBUG
-        Serial.println(F("Switch case 2 reached: Powering down"));
-      #endif 
-      
-      checkReady(F("case 2 beginning"));
-      epcSleep();
-      checkReady(F("case 2 end"));
-      break;
+
+  switch (buttonResult)
+  {
+  case 1: // single press < 1s
+#ifdef DEBUG
+    Serial.println(F("Taking a picture"));
+#endif
+    checkReady(F("While asleep in case 1"));
+    epcWake(); // includes delays
+    capture(1000);
+//if(success)                   // If the camera can be read, read the picture
+//{
+#ifdef STATUS_PRINTING
+    Serial.print(F("readPicture() called:\t"));
+#endif
+    readPicture();
+    epcSleep();
+    //printPicture(picture);
+    break;
+
+  case 2: // single press > 1s
+#ifdef DEBUG
+    Serial.println(F("Switch case 2 reached: Powering down"));
+#endif
+
+    checkReady(F("case 2 beginning"));
+    epcSleep();
+    checkReady(F("case 2 end"));
+    break;
   }
 }
 
 // done, not tested
 // flush: clears pixels and frame stores
-void flush() {
+void flush()
+{
   digitalWrite(CLR_PIX, HIGH);
   lastFlush = millis();
   //  delayMicroseconds(1); //shouldn't be necessary. In addition, digitalWrite() takes ~~ 3.4us
@@ -180,7 +242,8 @@ void flush() {
 
 // done, not tested
 // flushBuffer: clears pixels and frame stores
-void flushBuffer() {
+void flushBuffer()
+{
   digitalWrite(CLR_DATA, HIGH);
   lastFlush = micros();
   //  delayMicroseconds(1); shouldn't be necessary. In addition, digitalWrite()
@@ -189,24 +252,26 @@ void flushBuffer() {
 }
 
 // done, not tested
-// capture: 
+// capture:
 void capture(long exposure) // exposure time [us]
 {
-  #ifdef STATUS_PRINTING
-    Serial.println(F("Taking image"));
-  #endif
-  flush();  // clear pixels
+#ifdef STATUS_PRINTING
+  //Serial.println(F("Taking image"));
+#endif
+  //flush(); // clear pixels
   digitalWrite(SHUTTER, HIGH);
   delayMicroseconds(T_FLUSH + exposure - 7); // the -7 is a guess at compensating for digitalWrite()
   digitalWrite(SHUTTER, LOW);
-  delayMicroseconds(T_SHIFT*2);
+  //delayMicroseconds(T_SHIFT);
 }
 
 // If DATA_RDY is HIGH, reads from sensor; STATUS_PRINTING results
 // calls readPixel() if DATA_RDY, calls epcSleep() if not
-bool readPicture()//int picture[]) // pass by reference
+bool readPicture() //int picture[]) // pass by reference
 {
-  while(micros() - lastFlush < T_CDS){}// ensure time to shift to stored pixels has passed
+  while (micros() - lastFlush < T_CDS)
+  {
+  } // ensure time to shift to stored pixels has passed
 
   bool Rdy = isDataReady();
   /*while (!isDataReady() ){
@@ -217,222 +282,264 @@ bool readPicture()//int picture[]) // pass by reference
   #endif
   }
    */
-  Serial.begin(9600);
+  //Serial.begin(9600);
   if (!Rdy)
   {
     epcSleep();
-    Serial.println(F("Data ready is low. returned False.\n"));
+    //Serial.println(F("Data ready is low. returned False.\n"));
     return false; // not ready to output an image
   }
-  
+
   SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE3));
-  
+
   // make sure ADC is awoken with a dummy read
   SPI.transfer(0);
-  
-  // pre-load sensor pipeline
-  for (int i = 0; i < 3; i++) 
+
+  digitalWrite(READ, HIGH);
+  delayMicroseconds(1);
+  digitalWrite(READ, LOW);
+  delayMicroseconds(2);
+
+  //pre-load sensor pipeline
+  for (int i = 0; i < 3; i++)
   {
     digitalWrite(READ, HIGH);
     delayMicroseconds(READ_DELAY);
     digitalWrite(READ, LOW);
     delayMicroseconds(READ_DELAY);
   }
-  
-  // for each pixel: send a READ pulse, read the ADC, print the read 
-  for (int i = 0; i < 1024; i++) {
-    
-    Serial.println(readPixel());  // send value
+
+  // for each pixel: send a READ pulse, read the ADC, print the read
+  for (unsigned int i = 0; i < 512; i++)
+  {
+    digitalWrite(READ, HIGH);
+    NOP; NOP;
+    digitalWrite(READ, LOW);
+    //delayMicroseconds(3);
+    picture[i * picsize / 512] = readPixelBig();
+    //Serial.println(readPixelBig()); // send value
     //Serial.write(13);  // carriage return
     //Serial.write(10);  // linefeed
-    
+
     //picture[i] = readPixel();
   }
-  
+
   SPI.endTransaction();
-  #ifdef STATUS_PRINTING
-    Serial.println(F("Transmission completed!\n"));
-  #endif
+#ifdef STATUS_PRINTING
+  Serial.println(F("Transmission completed!\n"));
+#endif
   return true;
 }
 
 // currently returns 8-BIT INT
 uint_least8_t readPixel() // take 1 ADC reading
 {
-  #ifdef DEBUG_PIXEL
-    Serial.println(F("Reading pix"));
-  #endif
-  
+#ifdef DEBUG_PIXEL
+  Serial.println(F("Reading pix"));
+#endif
+
   byte temp;
-  uint_least16_t val = 0;     // the value of the pixel should be (val+1)/4096
-  digitalWrite(ADC_CS,LOW);     // Write CS low to start the ADC sample & transmit
-  
-  temp = SPI.transfer(0);       // read first 8 bits; first 4 are zeroes and not a part of the read
-  
-  val = temp;                   // set val = to high byte
-  
+  uint_least16_t val = 0;    // the value of the pixel should be (val+1)/4096
+  digitalWrite(ADC_CS, LOW); // Write CS low to start the ADC sample & transmit
+
+  temp = SPI.transfer(0); // read first 8 bits; first 4 are zeroes and not a part of the read
+
+  val = temp; // set val = to high byte
+
   temp = SPI.transfer(0);
-  
-  //val += temp; 
-  val = (val * 256) + temp;     // shift the high byte and add the low byte
+
+  //val += temp;
+  val = (val * 256) + temp; // shift the high byte and add the low byte
   val = val >> 4;
-  digitalWrite(ADC_CS, HIGH);   // finish this transaction
-  
+  digitalWrite(ADC_CS, HIGH); // finish this transaction
+
   return val;
   //return analogRead(A1);
 }
 
-
-void checkReady(String input) 
+uint16_t readPixelBig() // take 1 ADC reading
 {
-  #ifdef STATUS_PRINTING
-    bool test = isDataReady();
-    Serial.begin(9600);
-    Serial.print(F("Cam has DATA_RDY status "));
-    Serial.print(String(test));
-    Serial.print(F(" at "));
-    Serial.println(input);
-    Serial.print(F("\n"));
-    //Serial.end();
-  #endif
+#ifdef DEBUG_PIXEL
+  Serial.println(F("Reading pix"));
+#endif
+
+  byte temp;
+  uint16_t val = 0;          // the value of the pixel should be (val+1)/4096
+  digitalWrite(ADC_CS, LOW); // Write CS low to start the ADC sample & transmit
+
+  temp = SPI.transfer(0); // read first 8 bits; first 4 are zeroes and not a part of the read
+
+  val = temp; // set val = to high byte
+
+  temp = SPI.transfer(0);
+
+  //val += temp;
+  val = (val * 256) + temp;   // shift the high byte and add the low byte
+  digitalWrite(ADC_CS, HIGH); // finish this transaction
+
+  return val;
+  //return analogRead(A1);
+}
+
+void checkReady(String input)
+{
+#ifdef STATUS_PRINTING
+  bool test = isDataReady();
+  Serial.begin(9600);
+  Serial.print(F("Cam has DATA_RDY status "));
+  Serial.print(String(test));
+  Serial.print(F(" at "));
+  Serial.println(input);
+  Serial.print(F("\n"));
+  //Serial.end();
+#endif
 }
 
 void readButton()
 {
-  currentButtonTime = millis();             // waiting to read the button requires a time comparison
+  currentButtonTime = millis();                                // waiting to read the button requires a time comparison
   if (currentButtonTime - previousButtonTime > buttonInterval) // compare button refresh time
   {
-    previousButtonTime = currentButtonTime;                 // update previousButtonTime
-    
-    if (buttonRead == digitalRead(switchPin))               // verify two reads are the same
-    {        
-      if (buttonRead != buttonState)                          // Button State has changed!
+    previousButtonTime = currentButtonTime; // update previousButtonTime
+
+    if (buttonRead == digitalRead(switchPin)) // verify two reads are the same
+    {
+      if (buttonRead != buttonState) // Button State has changed!
       {
-        buttonState = buttonRead;                               // Update button state
-        #ifdef DEBUG_BUTTON
-          Serial.println(F("Button Changed"));
-        #endif
-        if (buttonRead == LOW)                                    // if button has been RELEASED
-        {                        
-          if(currentButtonTime - buttonPressStart < 1000) {buttonResult = 1;}        // button has been pressed for < 1s
-          else{buttonResult = 2;}
+        buttonState = buttonRead; // Update button state
+#ifdef DEBUG_BUTTON
+        Serial.println(F("Button Changed"));
+#endif
+        if (buttonRead == LOW) // if button has been RELEASED
+        {
+          if (currentButtonTime - buttonPressStart < 1000)
+          {
+            buttonResult = 1;
+          } // button has been pressed for < 1s
+          else
+          {
+            buttonResult = 2;
+          }
         }
-        else                                                      // button has been PRESSED
+        else // button has been PRESSED
         {
           buttonResult = 0;
           buttonPressStart = millis();
         }
-        #ifdef DEBUG_BUTTON
-          Serial.println(buttonResult);
-          Serial.println();
-        #endif
+#ifdef DEBUG_BUTTON
+        Serial.println(buttonResult);
+        Serial.println();
+#endif
       }
-      else {buttonResult = 0;}                                // Button State has not changed; do nothing in the switch statement
-      
+      else
+      {
+        buttonResult = 0;
+      } // Button State has not changed; do nothing in the switch statement
     }
-  } 
+  }
   //return buttonResult;
 }
 
-
 void printPicture()
 {
-  for (int i = 0; i < 1024; i++) {
-    Serial.println(picture[i]);  // send value
+  for (unsigned int i = 0; i < picsize; i++)
+  {
+    Serial.println(picture[i]); // send value
     //Serial.write(13);  // carriage return
     //Serial.write(10);  // linefeed
   }
 }
 
-void epcSleep() 
+void epcSleep()
 {
   digitalWrite(PWR_DOWN, HIGH);
-  delay(5);      // just for good measure.
+  delay(5); // just for good measure.
   cameraState = 0;
 }
 
 // Wake up chip; calls runConfig and isDataReady()
-void epcWake() 
+void epcWake()
 {
   runConfig();
   delayMicroseconds(10);
   digitalWrite(PWR_DOWN, LOW);
   delayMicroseconds(T_WAKE_UP);
-  Serial.begin(9600);
+  //Serial.begin(9600);
   cameraState = 1;
 }
 
 // EPC Configuration (including DATA_RDY for charge pump). does NOT touch power pins
 void runConfig()
 {
-  #ifdef CONFIG_PRINTING
-    Serial.end();
-    Serial.begin(9600);
-    Serial.println(F("Initializing Sensor"));
-  #endif 
+#ifdef CONFIG_PRINTING
   Serial.end();
-  
-  #ifdef CHARGE_PUMP
-    pinMode(DATA_RDY, OUTPUT); // Turns on charge pump @ start if high, signals there is another frame yet to be read out afterwards
-  #else
-    pinMode(DATA_RDY, INPUT);
-  #endif     
-  
-  // PINMODE AND SETUP FOR NOT USING ADC 
-  //pinMode(A1,INPUT);
+  Serial.begin(9600);
+  Serial.println(F("Initializing Sensor"));
+#endif
+  Serial.end();
 
-  // Charge Pump on
-  #ifdef CHARGE_PUMP
-    digitalWrite(DATA_RDY, HIGH);
-  #endif
+#ifdef CHARGE_PUMP
+  pinMode(DATA_RDY, OUTPUT); // Turns on charge pump @ start if high, signals there is another frame yet to be read out afterwards
+#else
+  pinMode(DATA_RDY, INPUT);
+#endif
+
+// PINMODE AND SETUP FOR NOT USING ADC
+//pinMode(A1,INPUT);
+
+// Charge Pump on
+#ifdef CHARGE_PUMP
+  digitalWrite(DATA_RDY, HIGH);
+#endif
 
   // defaults
   digitalWrite(CLR_DATA, LOW);
   digitalWrite(CLR_PIX, LOW);
   digitalWrite(READ, LOW);
-  digitalWrite(ADC_CS, HIGH);       // ADC not selected
+  digitalWrite(ADC_CS, HIGH); // ADC not selected
 
   //digitalWrite(SHUTTER, LOW);
   //digitalWrite(ADC_CLK, HIGH);
 
-  delay(10);  // Sensor startup time
-  
-  #ifdef CHARGE_PUMP
-    digitalWrite(DATA_RDY, LOW);    // config should be done
-    pinMode(DATA_RDY, INPUT);       // 
-  #endif
-  
-  Serial.begin(9600);
-  
+  digitalWrite(PWR_DOWN, LOW);
+
+  delay(10); // Sensor startup time
+
+#ifdef CHARGE_PUMP
+  digitalWrite(DATA_RDY, LOW); // config should be done
+  pinMode(DATA_RDY, INPUT);    //
+#endif
+
+  //Serial.begin(9600);
+
   lastFlush = millis();
 }
 
 // Assumes Serial is started; calls readPixel()
 void adcStart()
 {
-  #ifdef CONFIG_PRINTING
-    Serial.println(F("Starting SPI for Dummy Read\n"));
-  #endif
- 
-  SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE3));     // Clock polarity = 1, CLK Phase = 1, data output on the falling edge
-  
-  #ifdef CONFIG_PRINTING
-    Serial.println(F("About to call readPixel()"));
-  #endif
-  test = readPixel();  // wake adc
+#ifdef CONFIG_PRINTING
+  Serial.println(F("Starting SPI for Dummy Read\n"));
+#endif
+
+  SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE3)); // Clock polarity = 1, CLK Phase = 1, data output on the falling edge
+
+#ifdef CONFIG_PRINTING
+  Serial.println(F("About to call readPixel()"));
+#endif
+  test = readPixel(); // wake adc
   SPI.endTransaction();
-  
-  #ifdef STATUS_PRINTING
-    Serial.print(F("Startup Dummy ADC Read with result of "));
-    Serial.println(test, BIN);
-  #endif
+
+#ifdef STATUS_PRINTING
+  Serial.print(F("Startup Dummy ADC Read with result of "));
+  Serial.println(test, BIN);
+#endif
 }
 
 // Ends serial, resets & reads DATA_RDY pin
 bool isDataReady()
 {
-  Serial.end();
-  digitalWrite(DATA_RDY, LOW);
-  pinMode(DATA_RDY, INPUT);
-  return digitalRead(DATA_RDY);   // HIGH ==> ready
+  //Serial.end();
+  //pinMode(DATA_RDY, INPUT);
+  return digitalRead(DATA_RDY); // HIGH ==> ready
 }
