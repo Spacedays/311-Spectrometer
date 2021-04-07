@@ -3,44 +3,56 @@
 clear, clc
 
 port = serialportlist("available");
-arduinoObj = serialport(port(end), 9600); % Selects the COM port for the Arduino
-configureTerminator(arduinoObj, "CR/LF")
+disp("Connecting to "+port(end))
+arduinoObj = serialport(port(end), 115200); % Selects the COM port for the Arduino
+configureTerminator(arduinoObj, "LF")
 flush(arduinoObj)
-arduinoObj.UserData = struct("Data", [], "Count", 1);
-
-% Read the Arduino Function
-
-configureCallback(arduinoObj, "terminator", @readSpectrum)
 
 load("Data001")
 calibData = @(x) (interp1(Data001(:, 1), Data001(:, 2), x, 'spline'))/100;
 intensityCalib = @(lambda, intensity) intensity/calibData(lambda);
+%writeline(arduinoObj, " 2")
 
-while arduinoObj.UserData.Count <= 1024
-    % Do Nothing
+raw = 1:256;
+p = plot(raw);
+p.YDataSource = "raw";
+title('Intensity vs. Wavelength')
+xlabel('Wavelength')
+ylabel('Intensity')
+
+while ishghandle(p)
+    raw = [];
+    while length(raw) < 256
+        if arduinoObj.NumBytesAvailable>0
+            %read(arduinoObj,1,"char")
+            raw(end+1) = str2double(readline(arduinoObj));
+        end
+        pause(0.00001)
+    end
+    refreshdata
+    drawnow
+    % disp("Update")
+    pause(0.01)
 end
 
-load("Hydrogen")
-
-raw = arduinoObj.UserData.Data;
-
-function readSpectrum(src, ~)
-
-% Read data from the serialport object
-data = readline(src);
-
-% Convert the string data to numeric type and save it to UserData property
-% of the serialport object,
-src.UserData.Data(end+1) = str2double(data);
-
-% Update the Count value of the serialport object
-src.UserData.Count = src.UserData.Count+1;
-
-% If 1001 data points have been collected from the Arduino, switch off the
-% callbacks and plot the data
-
-if src.UserData.Count > 1024
-    configureCallback(src, "off");
+selection = questdlg('Save Last Dataset?', 'Figure Closed', 'Yes', 'No', 'Yes');
+switch selection
+    case 'Yes'
+      writematrix(raw, input('File Name: ', 's'))
+    case 'No'
 end
+
+selection = questdlg('Save Last Figure?', 'Figure Closed', 'Yes', 'No', 'Yes');
+p = plot(raw);
+switch selection
+    case 'Yes'
+      saveas(p, input('Figure Name: ', 's'))
+    case 'No'
 end
+% load("Hydrogen")
+
+%raw
+
+clear arduinoObj
+close all
 
