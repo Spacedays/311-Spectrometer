@@ -17,6 +17,8 @@ See the Software notes document for background information
 // Variable Declarations
 
 const unsigned int switchPin = 7; // button pin
+const int shutTime = 10000;
+
 // Breakout Pins
 const uint_least8_t PWR_DOWN = 0;
 const uint_least8_t DATA_RDY = 1;
@@ -57,7 +59,7 @@ bool buttonState;
 uint_least8_t buttonResult = 0; // 0 = no change, 1 = pressed < 1s (with debounce), 2 = pressed > 1s
 
 // Misc
-const unsigned int picsize = 128;
+const unsigned long picsize = 256;
 uint16_t picture[picsize];
 bool success; // Flag for camera success
 byte test;
@@ -86,147 +88,140 @@ void setup()
   checkReady(F("end of Setup()"));
 
   // DEBUGGING
-  for (int j = 0; j < 10; j++)
+  Serial.end();
+  pinMode(DATA_RDY, INPUT);
+  delay(100);
+  epcWake();
+  
+  capture(shutTime);
+  
+  bool captured = readPicture();
+
+  delay(10);
+  Serial.begin(115200);
+ 
+  if (captured)
   {
-    Serial.end();
-    pinMode(DATA_RDY, INPUT);
-    delay(100);
-    epcWake();
-    bool earlyRdy = digitalRead(DATA_RDY);
-    capture(1000);
-    bool Rdy = digitalRead(DATA_RDY);
-    int numMicros = 0;
-    for (int i = 1; i < 1000 && !Rdy; i++)
-    {
-      Rdy = digitalRead(DATA_RDY);
-      delayMicroseconds(1);
-      numMicros = i;
-    }
-
-    bool captured = readPicture();
-
-    delay(10);
-
-    bool stillRdy = digitalRead(DATA_RDY);
-
-    delay(10);
-    Serial.begin(9600);
-    Serial.println(F("End Debug: "));
-    if (earlyRdy)
-    {
-      Serial.println(F("Prematurely ready"));
-    }
-
-    if (Rdy)
-    {
-      Serial.print(F("Ready after "));
-      Serial.print(numMicros);
-      Serial.println(F(" microseconds!"));
-    }
-    else
-    {
-      Serial.println(F("not ready :("));
-    }
-
-    if (captured)
-    {
-      Serial.println(F("Image captured"));
-      printPicture();
-    }
-
-    if (stillRdy)
-    {
-      Serial.println(F("Sensor indicates data not read"));
-    }
-
-    delay(5000);
-
-    epcSleep();
+    //Serial.println(F("Image captured"));
+    printPicture();
   }
 }
-
+unsigned long loops = 0;
 void loop()
 {
-  //if(!Serial){Serial.begin(9600);}
+  //if(!Serial){Serial.begin(115200);}
+  loops++;
 
   if (millis() - lastFlush > T_PERIOD_FLUSH) // flush check
   {
     flushBuffer();
   }
 
-  buttonRead = digitalRead(switchPin); // read the button
-  readButton();                        // updates buttonResult
-  if (Serial.available() > 0)
-  {
-    test = Serial.read(); // read incoming byte
-
-    if (test == 'W')
-    {
-      Serial.println(F("Waking up"));
-      epcWake();
-    }
-    else if (test == 'S')
-    {
-      Serial.println(F("Going to sleep"));
-      epcSleep();
-    }
-    else if (test == '0')
-    {
-      Serial.println(F("Checking Ready status:"));
-      checkReady(F("terminal"));
-    }
-    else if (test == '1')
-    {
-      Serial.println(F("Calling readPicture()"));
-      readPicture();
-    }
-    else if (test == '2')
-    {
-      Serial.println(F("Calling epcWake() -> capture(1000) -> readPicture() -> epcSleep()"));
-      epcWake();
-      capture(1000);
-      readPicture();
-      epcSleep();
-    }
-    else if (test == '3')
-    {
-      Serial.println(F("Calling epcSleep() -> capture(1000) -> readPicture() -> epcWake()"));
-      epcWake();
-      capture(1000);
-      readPicture();
-      epcSleep();
-    }
-  }
-
-  switch (buttonResult)
-  {
-  case 1: // single press < 1s
-#ifdef DEBUG
-    Serial.println(F("Taking a picture"));
-#endif
-    checkReady(F("While asleep in case 1"));
-    epcWake(); // includes delays
+  if(loops%3==0) {
+    Serial.end();
+    pinMode(DATA_RDY, INPUT);
+    delay(10);
+    epcWake();
+    
     capture(1000);
-//if(success)                   // If the camera can be read, read the picture
-//{
-#ifdef STATUS_PRINTING
-    Serial.print(F("readPicture() called:\t"));
-#endif
-    readPicture();
-    epcSleep();
-    //printPicture(picture);
-    break;
-
-  case 2: // single press > 1s
-#ifdef DEBUG
-    Serial.println(F("Switch case 2 reached: Powering down"));
-#endif
-
-    checkReady(F("case 2 beginning"));
-    epcSleep();
-    checkReady(F("case 2 end"));
-    break;
+    
+    bool captured = readPicture();
+  
+    delay(10);
+    Serial.begin(115200);
+  
+    delay(10);
+   
+    if (captured)
+    {
+      //Serial.println(F("Image captured"));
+      printPicture();
+    }
+    
   }
+
+  delay(100);
+  
+
+//  buttonRead = digitalRead(switchPin); // read the button
+//  readButton();                        // updates buttonResult
+//  if (Serial.available() > 0)
+//  {
+//    test = Serial.read(); // read incoming byte
+//
+//    if (test == 'W')
+//    {
+//      Serial.println(F("Waking up"));
+//      epcWake();
+//    }
+//    else if (test == 'S')
+//    {
+//      Serial.println(F("Going to sleep"));
+//      epcSleep();
+//    }
+//    else if (test == '0')
+//    {
+//      Serial.println(F("Checking Ready status:"));
+//      checkReady(F("terminal"));
+//    }
+//    else if (test == '1')
+//    {
+//      Serial.println(F("Calling readPicture()"));
+//      readPicture();
+//    }
+//    else if (test == '2')
+//    {
+//      //Serial.begin(115200);
+//      //Serial.println(F("Calling epcWake() -> capture(1000) -> readPicture() -> epcSleep()"));
+//      Serial.end();
+//      pinMode(DATA_RDY, INPUT);
+//      delay(100);
+//      epcWake();
+//      
+//      capture(1000);
+//      
+//      bool captured = readPicture();
+//  
+//      delay(10);
+//      Serial.begin(115200);
+//     
+//      if (captured)
+//      {
+//        //Serial.println(F("Image captured"));
+//        printPicture();
+//      }
+//    }
+//  }
+//
+//  switch (buttonResult)
+//  {
+//  case 1: // single press < 1s
+//#ifdef DEBUG
+//    Serial.println(F("Taking a picture"));
+//#endif
+//    checkReady(F("While asleep in case 1"));
+//    epcWake(); // includes delays
+//    capture(1000);
+////if(success)                   // If the camera can be read, read the picture
+////{
+//#ifdef STATUS_PRINTING
+//    Serial.print(F("readPicture() called:\t"));
+//#endif
+//    readPicture();
+//    epcSleep();
+//    //printPicture(picture);
+//    break;
+//
+//  case 2: // single press > 1s
+//#ifdef DEBUG
+//    Serial.println(F("Switch case 2 reached: Powering down"));
+//#endif
+//
+//    checkReady(F("case 2 beginning"));
+//    epcSleep();
+//    checkReady(F("case 2 end"));
+//    break;
+//  }
 }
 
 // done, not tested
@@ -282,7 +277,7 @@ bool readPicture() //int picture[]) // pass by reference
   #endif
   }
    */
-  //Serial.begin(9600);
+  //Serial.begin(115200);
   if (!Rdy)
   {
     epcSleep();
@@ -310,13 +305,20 @@ bool readPicture() //int picture[]) // pass by reference
   }
 
   // for each pixel: send a READ pulse, read the ADC, print the read
-  for (unsigned int i = 0; i < 512; i++)
+  for (unsigned long i = 0; i < 1024; i++)
   {
     digitalWrite(READ, HIGH);
     NOP; NOP;
     digitalWrite(READ, LOW);
     //delayMicroseconds(3);
-    picture[i * picsize / 512] = readPixelBig();
+    if (i >= 384 && i < 640)
+    {
+    picture[i-384] = readPixelBig();
+    }
+    else
+    {
+      readPixelBig();
+    }
     //Serial.println(readPixelBig()); // send value
     //Serial.write(13);  // carriage return
     //Serial.write(10);  // linefeed
@@ -385,7 +387,7 @@ void checkReady(String input)
 {
 #ifdef STATUS_PRINTING
   bool test = isDataReady();
-  Serial.begin(9600);
+  Serial.begin(115200);
   Serial.print(F("Cam has DATA_RDY status "));
   Serial.print(String(test));
   Serial.print(F(" at "));
@@ -448,6 +450,7 @@ void printPicture()
     //Serial.write(13);  // carriage return
     //Serial.write(10);  // linefeed
   }
+  Serial.flush();
 }
 
 void epcSleep()
@@ -464,7 +467,7 @@ void epcWake()
   delayMicroseconds(10);
   digitalWrite(PWR_DOWN, LOW);
   delayMicroseconds(T_WAKE_UP);
-  //Serial.begin(9600);
+  //Serial.begin(115200);
   cameraState = 1;
 }
 
@@ -473,7 +476,7 @@ void runConfig()
 {
 #ifdef CONFIG_PRINTING
   Serial.end();
-  Serial.begin(9600);
+  Serial.begin(115200);
   Serial.println(F("Initializing Sensor"));
 #endif
   Serial.end();
@@ -510,7 +513,7 @@ void runConfig()
   pinMode(DATA_RDY, INPUT);    //
 #endif
 
-  //Serial.begin(9600);
+  //Serial.begin(115200);
 
   lastFlush = millis();
 }
