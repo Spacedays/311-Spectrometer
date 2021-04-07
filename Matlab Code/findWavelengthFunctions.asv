@@ -3,8 +3,9 @@
 pixels =	[60 70	80	90	100 110 120 130 140 ];
 intensity = [5	100 7	6	8	60	500	120	0	];
 
-calibration_indeces = findDualPeaks(intensity,2)
-wavelength = findWavelength(pixels,calibration_indeces)
+LAM = [700 450];
+[c_a c_b] = findDualPeaks(intensity,2);
+wavelength = findWavelength(pixels,[c_a c_b], LAM)
 
 
 function lambda = findWavelength(idx,calib_idx,LAM)
@@ -23,7 +24,7 @@ function lambda = findWavelength(idx,calib_idx,LAM)
 % calib_idx: Indeces of two peak wavelengths, in order of wavelength Highest to lowest
 
 % optional arg LAM
-if ~exist(LAM,'var')
+if ~exist('LAM','var')
 	LAM_a = 656.2;	% hydrogen main peak 1 [nm]
 	LAM_b = 486.1;	% hydrogen main peak 2 [nm]
 %	LAM_c = 434.0;	% hydrogen tertiary peak [nm]
@@ -36,7 +37,10 @@ i_a = calib_idx(1);
 i_b = calib_idx(2);
 %i_c = calib_idx(3);
 
-lambda = (LAM_a - LAM_b)./ (i_a-i_b) * (idx-i_a) + LAM_a;
+slope = (LAM_a - LAM_b)./ (i_a-i_b);
+offset = LAM_a - slope*i_a;
+
+lambda =  slope*(idx-i_b) + offset;
 end
 
 function [idx_a,idx_b] = findDualPeaks(intensity,peakWidth,greater)
@@ -60,7 +64,7 @@ if ~exist('higher','var')
 end
 
 % Primary peak & pixel index
-[values(1), idx(1)] = max(intensity);
+[~, idx(1)] = max(intensity);
 intensity((idx(1)-peakWidth):(idx(1)+peakWidth)) = 0;		
 
 % find bounds for erase zone
@@ -108,11 +112,39 @@ end
 
 % Primary peak & pixel index
 [values(1), idx(1)] = max(intensity);
-intensity((idx(1)-peakWidth):(idx(1)+peakWidth)) = 0;		% Erase data around first peak so search can find next largest peaks
+
+% find bounds for erase zone
+erase_zone_bottom = (idx(1)-peakWidth);
+erase_zone_top = (idx(1)+peakWidth);
+
+% correct bounds for erase zone
+if( erase_zone_bottom < 0)
+	erase_zone_bottom = 0;
+end
+if(erase_zone_top > length(intensity))
+	erase_zone_top = length(intensity);
+end
+
+% Erase data around first peak so search can find next largest peaks
+intensity(erase_zone_bottom:erase_zone_top) = 0;		% Erase Primary peak
 
 % Secondary peak & pixel index
-[values(2), idx(2)] = max(intensity);
-intensity((idx(2)-peakWidth):(idx(2)+peakWidth)) = 0;
+[~, idx(2)] = max(intensity);
+
+
+% find bounds for erase zone
+erase_zone_bottom = (idx(2)-peakWidth);
+erase_zone_top = (idx(2)+peakWidth);
+
+% correct bounds for erase zone
+if( erase_zone_bottom < 0)
+	erase_zone_bottom = 0;
+end
+if(erase_zone_top > length(intensity))
+	erase_zone_top = length(intensity);
+end
+
+intensity(erase_zone_bottom:erase_zone_top) = 0;		% Erase Secondary peak
 
 % Tertiary peak & pixel index
 [~, idx_c] = max(intensity);

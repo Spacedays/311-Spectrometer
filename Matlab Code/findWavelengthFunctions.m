@@ -3,8 +3,9 @@
 pixels =	[60 70	80	90	100 110 120 130 140 ];
 intensity = [5	100 7	6	8	60	500	120	0	];
 
-[c_a c_b] = findDualPeaks(intensity,2)
-wavelength = findWavelength(pixels,[c_a c_b])
+LAM = [700 450];	% approx peaks of the grow lights
+[c_a c_b] = findDualPeaks(intensity,2);
+wavelength = findWavelength(pixels,[pixels(c_a) pixels(c_b)], LAM)
 
 
 function lambda = findWavelength(idx,calib_idx,LAM)
