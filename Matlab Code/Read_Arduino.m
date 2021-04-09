@@ -9,16 +9,19 @@ configureTerminator(arduinoObj, "LF")
 flush(arduinoObj)
 
 load("Data001")
+load('Calibrated_Wavelength')
 calibData = @(x) (interp1(Data001(:, 1), Data001(:, 2), x, 'spline'))/100;
 intensityCalib = @(lambda, intensity) intensity/calibData(lambda);
 %writeline(arduinoObj, " 2")
 
 raw = 1:256;
-p = plot(raw);
+
+p = plot(raw, wavelength);
+p.XDataSource = 'wavelength';
 p.YDataSource = "raw";
-title('Intensity vs. Wavelength')
-xlabel('Wavelength')
-ylabel('Intensity')
+title('Relative Intensity vs. Wavelength')
+xlabel('Wavelength [nm]')
+ylabel('Relative Intensity')
 
 while ishghandle(p)
     raw = [];
@@ -35,6 +38,11 @@ while ishghandle(p)
     pause(0.01)
 end
 
+p = plot(wavelength, raw);
+title('Relative Intensity vs. Wavelength')
+xlabel('Wavelength [nm]')
+ylabel('Relative Intensity')
+
 selection = questdlg('Save Last Dataset?', 'Figure Closed', 'Yes', 'No', 'Yes');
 switch selection
     case 'Yes'
@@ -43,16 +51,11 @@ switch selection
 end
 
 selection = questdlg('Save Last Figure?', 'Figure Closed', 'Yes', 'No', 'Yes');
-p = plot(raw);
 switch selection
     case 'Yes'
       saveas(p, input('Figure Name: ', 's'))
     case 'No'
 end
-% load("Hydrogen")
-
-%raw
 
 clear arduinoObj
 close all
-

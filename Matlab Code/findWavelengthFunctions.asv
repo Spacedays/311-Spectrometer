@@ -1,11 +1,61 @@
-%%
-% Example call: 
-pixels =	[60 70	80	90	100 110 120 130 140 ];
-intensity = [5	100 7	6	8	60	500	120	0	];
+% This is code for taking data off of the Arduino and displaying it
 
-LAM = [700 450];
-[c_a c_b] = findDualPeaks(intensity,2);
-wavelength = findWavelength(pixels,[c_a c_b], LAM)
+clear, clc
+
+port = serialportlist("available");
+disp("Connecting to "+port(end))
+arduinoObj = serialport(port(end), 115200); % Selects the COM port for the Arduino
+configureTerminator(arduinoObj, "LF")
+flush(arduinoObj)
+
+load("Data001")
+calibData = @(x) (interp1(Data001(:, 1), Data001(:, 2), x, 'spline'))/100;
+intensityCalib = @(lambda, intensity) intensity/calibData(lambda);
+%writeline(arduinoObj, " 2")
+
+raw = 1:256;
+
+p = plot(raw);
+p.YDataSource = "raw";
+title('Relative Intensity vs. Pixel')
+xlabel('Pixel')
+ylabel('Relative Intensity')
+
+while ishghandle(p)
+    raw = [];
+    while length(raw) < 256
+        if arduinoObj.NumBytesAvailable>0
+            %read(arduinoObj,1,"char")
+            raw(end+1) = str2double(readline(arduinoObj));
+        end
+        pause(0.00001)
+    end
+    refreshdata
+    drawnow
+    % disp("Update")
+    pause(0.01)
+end
+
+selection = questdlg('Save Last Dataset?', 'Figure Closed', 'Yes', 'No', 'Yes');
+switch selection
+    case 'Yes'
+      writematrix(raw, input('File Name: ', 's'))
+    case 'No'
+end
+
+clear arduinoObj
+close all
+
+
+
+% %%
+% % Example call: 
+% pixels = 1:1:256;
+% intensity = raw;
+% 
+% LAM = [700 450];	% approx peaks of the grow lights
+% [c_a c_b] = findDualPeaks(intensity,20);
+% wavelength = findWavelength(pixels,[pixels(c_a) pixels(c_b)], LAM);
 
 
 function lambda = findWavelength(idx,calib_idx,LAM)
@@ -38,7 +88,7 @@ i_b = calib_idx(2);
 %i_c = calib_idx(3);
 
 slope = (LAM_a - LAM_b)./ (i_a-i_b);
-offset = LAM_a - slope*i_a;
+offset = LAM_b;
 
 lambda =  slope*(idx-i_b) + offset;
 end
