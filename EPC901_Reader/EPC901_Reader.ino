@@ -12,7 +12,7 @@ See the Software notes document for background information
 //#define DEBUG_PIXEL
 //#define DEBUG_ADC
 
-#define NOP __asm__ __volatile__ ("nop\n\t")
+#define NOP __asm__ __volatile__ ("nop\n\t")    // assembly code that does nothing? // should be a smaller delay than delayMicros()
 
 // Variable Declarations
 
@@ -308,7 +308,7 @@ bool readPicture() //int picture[]) // pass by reference
   for (unsigned long i = 0; i < 1024; i++)
   {
     digitalWrite(READ, HIGH);
-    NOP; NOP;
+    NOP; NOP;                 // in theory gets a smaller delay than micros, might not be necessary
     digitalWrite(READ, LOW);
     //delayMicroseconds(3);
     if (i >= 384 && i < 640)
