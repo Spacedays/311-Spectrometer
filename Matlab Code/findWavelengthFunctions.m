@@ -20,11 +20,13 @@ plot(wavelength,intensity)
 pixels3 =	[60 70	80	90	100 110 120 130 140 150 160 170 180 190 200	210];
 intensity3 = [5	100 7	6	8	60	500	120	0	10	5	10	50	600	250	0];
 
-[i_a i_b i_c] = findTriPeaks2(intensity3,2);
+[i_a i_b i_c] = findTriPeaks2(intensity3);
 wavelength3 = findWavelength(pixels3,[pixels3(i_c),pixels3(i_a)]);	% using default LAM values for hydrogen
 figure(3)
 plot(wavelength3,intensity3)
 
+
+%% functions
 function lambda = findWavelength(pixelArray,calib_idx,LAM)
 % For use with calibration; for hydrogen, i_a  should be the 656nm peak, i_b should be @ 486.1nm,
 % where lambda is the wavelength to be found & idx is the pixel index of the EPC to use
@@ -63,7 +65,6 @@ offset = LAM_a;
 lambda =  slope*(pixelArray-i_a) + offset;
 end
 
-% Old peak functions
 
 function [idx_low,idx_high] = findDualPeaks2(intensity,peakSpacing,greater)
 % Goal: return the index of the lower wavelength as idx_low USING THE SIGNAL PROCESSING TOOLBOX
@@ -122,6 +123,7 @@ idx_c = idx(3);
 
 end
 
+%% Old peak functions
 function [idx_low,idx_high] = findDualPeaks(intensity,peakSpacing,greater)
 % Goal: return the index of the lower wavelength as idx_low
 %

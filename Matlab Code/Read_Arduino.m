@@ -59,3 +59,9 @@ end
 
 clear arduinoObj
 close all
+
+function calibratedWavelength =  calibrateHydrogen(intensity)
+[i_a i_b i_c] = findTriPeaks2(intensity);
+wavelength = findWavelength(1:size(intensity),[i_c,i_a]);	% using default LAM values for hydrogen
+save('Calibrated Wavelength',wavelength)
+end
