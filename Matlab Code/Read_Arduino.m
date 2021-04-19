@@ -14,31 +14,41 @@ calibData = @(x) (interp1(Data001(:, 1), Data001(:, 2), x, 'spline'))/100;
 intensityCalib = @(lambda, intensity) intensity/calibData(lambda);
 %writeline(arduinoObj, " 2")
 
-raw = 1:256;
+avgLen = 2;
+raw = zeros(256,1);
+idx_reading = 1;
 
-p = plot(raw, wavelength);
+plotData = 1:256;
+
+p = plot(plotData, wavelength);
 p.XDataSource = 'wavelength';
-p.YDataSource = "raw";
+p.YDataSource = "plotData";
 title('Relative Intensity vs. Wavelength')
 xlabel('Wavelength [nm]')
 ylabel('Relative Intensity')
 
 while ishghandle(p)
-    raw = [];
-    while length(raw) < 256
+    idx_sample = 1;
+    while idx_sample <= 256
         if arduinoObj.NumBytesAvailable>0
-            %read(arduinoObj,1,"char")
-            raw(end+1) = str2double(readline(arduinoObj));
+            raw(idx_sample,idx_reading) = str2double(readline(arduinoObj));
+            idx_sample = idx_sample + 1;
         end
         pause(0.00001)
     end
+    idx_reading = idx_reading + 1;
+    if idx_reading > avgLen
+        idx_reading = idx_reading - 1;
+        raw(:,1) = [];
+    end
+    plotData = mean(raw,2);
     refreshdata
     drawnow
     % disp("Update")
     pause(0.01)
 end
 
-p = plot(wavelength, raw);
+p = plot(wavelength, plotData);
 title('Relative Intensity vs. Wavelength')
 xlabel('Wavelength [nm]')
 ylabel('Relative Intensity')
@@ -46,7 +56,7 @@ ylabel('Relative Intensity')
 selection = questdlg('Save Last Dataset?', 'Figure Closed', 'Yes', 'No', 'Yes');
 switch selection
     case 'Yes'
-      writematrix(raw, input('File Name: ', 's'))
+      writematrix(plotData, input('File Name: ', 's'))
     case 'No'
 end
 
