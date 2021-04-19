@@ -3,7 +3,7 @@ clear
 
 serialportlist("available") %establishing a communication
 
-ard = serialport("COM5", 9600)
+ard = serialport("COM9", 9600)
 
 configureTerminator(ard,"CR/LF")
 

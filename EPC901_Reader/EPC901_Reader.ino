@@ -60,14 +60,11 @@ bool buttonRead;
 bool buttonState;
 uint_least8_t buttonResult = 0; // 0 = no change, 1 = pressed < 1s (with debounce), 2 = pressed > 1s
 
-// Misc
-char buffer [] = {' ',' ',' ',' ',' ',' ',' '}; // Recieve up to 7 bytes; One command, 6 ints (for capture)
-
 long exposure = 1000;
 const unsigned long picsize = 256;
 uint16_t picture[picsize];
 
-bool consoleReading = false;       // Flag for listening for console commands
+bool looping = false;       // Flag for looping
 bool getting_time;  // Flag for recieving exposure time via serial
 bool success; // Flag for camera success
 byte readByte;
@@ -108,7 +105,7 @@ void loop()
   
   readConsole();
 
-  if(reading && loops%3==0) 
+  if(looping && loops%3==0) 
     {
       Serial.end();
       // epcSleep();
@@ -129,7 +126,7 @@ void loop()
         printPicture();
       }
     }
-
+    
   delay(100);
 } 
 
@@ -170,7 +167,9 @@ void readConsole()
     else if (readByte == '!') 
     {
       getting_time = false;
+      Serial.println(exposure);
     }       // End time
+    
    }
 
  }
@@ -180,10 +179,15 @@ void readConsole()
     
   switch(readByte){      
     case 'L':                                     // begin Looping
-      Serial.println("Starting looping");
+      Serial.println(F("Starting looping"));
       looping = true;
-      break;          
-    
+      break;  
+
+    case 'Q':                                     // begin Looping
+      Serial.println(F("Quitting looping"));
+      looping = false;
+      break;  
+      
     case 'W':                                     // Wake
       Serial.println(F("Waking up EPC901 (ends Serial)"));
       epcWake();
@@ -200,21 +204,18 @@ void readConsole()
       break;
 
    case 'C':                                      // Capture picture
-      Serial.println(F("Calling capture()"));
-
+      Serial.println(F("Calling capture() and readPicture()"));
       capture(exposure);
+      readPicture();
+      printPicture();
       break;
 
     case 'E':                                     // set Exposure time
-      Serial.println(F("Enter exposure time [microseconds] up to Y-bits. Enter T1000! for 1000 us"));
+      Serial.println(F("Enter exposure time [microseconds] up to ?-bits. Enter 1000! for 1000 us"));
       getting_time = true;
       exposure = 0;
       break;
 
-    case 'T':                                     // transmit Picture
-      Serial.println(F("Calling readPicture()"));
-      readPicture();
-      break;
 
     case '2':
      //Serial.begin(115200);
