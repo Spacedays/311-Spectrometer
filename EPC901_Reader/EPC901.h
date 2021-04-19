@@ -13,7 +13,7 @@ void epcSleep();
 void flush();
 void flushBuffer();
 bool isDataReady();
-void capture(long);
+void capture(long);           // Take Picture
 void adcStart();
 uint_least8_t readPixel();
 uint16_t readPixelBig();

@@ -61,8 +61,12 @@ bool buttonState;
 uint_least8_t buttonResult = 0; // 0 = no change, 1 = pressed < 1s (with debounce), 2 = pressed > 1s
 
 // Misc
+char buffer [] = {' ',' ',' ',' ',' ',' ',' '}; // Recieve up to 7 bytes; One command, 6 ints (for capture)
+unsigned int exposure = 1000;
 const unsigned long picsize = 256;
 uint16_t picture[picsize];
+bool looping;       // Flag for looping
+bool getting_time;  // Flag for recieving exposure time via serial
 bool success; // Flag for camera success
 byte readByte;
 uint_least8_t cameraState = 0; // 0 = asleep, 1 = active
@@ -85,27 +89,8 @@ void setup()
   adcStart();
   flushBuffer();
 
-  //epcSleep();
   buttonState = digitalRead(switchPin); // Read button
 
-  // DEBUGGING
-  Serial.end();
-  pinMode(DATA_RDY, INPUT);
-  delay(100);
-  epcWake();
-  
-  capture(shutTime);
-  
-  bool captured = readPicture();
-
-  delay(10);
-  Serial.begin(115200);
- 
-  if (captured)
-  {
-    //Serial.println(F("Image captured"));
-    printPicture();
-  }
 }
 
 unsigned long loops = 0;
@@ -119,37 +104,54 @@ void loop()
     flushBuffer();
   }
 
-  if(loops%3==0) {
-    Serial.end();
-    pinMode(DATA_RDY, INPUT);
-    delay(10);
-    epcWake();
-    
-    capture(1000);
-    
-    bool captured = readPicture();
-  
-    delay(10);
-    Serial.begin(115200);
-  
-    delay(10);
-   
-    if (captured)
+  while(looping)
+  {
+    if (Serial.available() > 0)
     {
-      printPicture();
+    readByte = Serial.read(); // read incoming byte
+      if (readByte == 'Q')
+      {
+        looping = false;
+      }
+    }
+
+    if(loops%3==0) 
+    {
+      epcWake();
+      
+      capture(exposure);
+      
+      bool captured = readPicture();
+    
+      delay(10);
+      Serial.begin(115200);
+    
+      delay(10);
+    
+      if (captured)
+      {
+        printPicture();
+      }
     }
   }
-
   delay(100);
 } 
+
+
 
 // Recieve commands from serial
 void readConsole()
 {
- if (Serial.available() > 0)
+ if (getting_time)
  {
-   readByte = Serial.read(); // read incoming byte
 
+ }
+ else if (Serial.available() > 0)
+ {
+  Serial.readBytesUntil('\n', buffer, 7);
+  
+  readByte = Serial.read(); // read incoming byte
+    
   switch(readByte){                
     case 'W':                                     // Wake
       Serial.println(F("Waking up EPC901"));
@@ -163,11 +165,33 @@ void readConsole()
       Serial.println(F("Checking Ready status:"));
       checkReady(F("terminal"));
       break;
-   case 'P':                                      // take Picture
+   case 'C':                                      // Capture picture
+      Serial.println(F("Calling capture()"));
+
+      capture(exposure);
+      break;
+    case 'E':                                     // set Exposure time
+      Serial.println(F("Enter exposure time [microseconds] up to Y-bits. Enter TXXXX! for XXXX us"));
+
+      //capture(exposure);
+      break;
+    case 'T':                                     // transmit Picture
+      Serial.println(F("Calling readPicture()"));
+      readPicture();
+      break;
+
    default:
      //Serial.begin(115200);
+     //Serial.println(F("Calling epcWake() -> capture(1000) -> readPicture() -> epcSleep()"));
+     Serial.end();
+     pinMode(DATA_RDY, INPUT);
+     delay(100);
      epcWake();
      
+     capture(exposure);
+     
+     bool captured = readPicture();
+ 
      delay(10);
      Serial.begin(115200);
     
@@ -239,7 +263,7 @@ void buttonSwitch(int buttonResult)
   #endif
    checkReady(F("While asleep in case 1"));
    epcWake(); // includes delays
-   capture(1000);
+   capture(exposure);
 
   #ifdef STATUS_PRINTING
     Serial.print(F("readPicture() called:\t"));
