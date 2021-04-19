@@ -62,10 +62,12 @@ uint_least8_t buttonResult = 0; // 0 = no change, 1 = pressed < 1s (with debounc
 
 // Misc
 char buffer [] = {' ',' ',' ',' ',' ',' ',' '}; // Recieve up to 7 bytes; One command, 6 ints (for capture)
-unsigned int exposure = 1000;
+
+long exposure = 1000;
 const unsigned long picsize = 256;
 uint16_t picture[picsize];
-bool looping;       // Flag for looping
+
+bool consoleReading = false;       // Flag for listening for console commands
 bool getting_time;  // Flag for recieving exposure time via serial
 bool success; // Flag for camera success
 byte readByte;
@@ -90,7 +92,7 @@ void setup()
   flushBuffer();
 
   buttonState = digitalRead(switchPin); // Read button
-
+  Serial.begin(115200);
 }
 
 unsigned long loops = 0;
@@ -103,20 +105,14 @@ void loop()
   {
     flushBuffer();
   }
+  
+  readConsole();
 
-  while(looping)
-  {
-    if (Serial.available() > 0)
+  if(reading && loops%3==0) 
     {
-    readByte = Serial.read(); // read incoming byte
-      if (readByte == 'Q')
-      {
-        looping = false;
-      }
-    }
-
-    if(loops%3==0) 
-    {
+      Serial.end();
+      // epcSleep();
+      // delay(1);
       epcWake();
       
       capture(exposure);
@@ -133,54 +129,94 @@ void loop()
         printPicture();
       }
     }
-  }
+
   delay(100);
 } 
 
+// static int getb(void)
+// {  while (!(Serial.available() > 0));                       /* Wait for data to arrive             */
+//    return Serial.read();                                    /* Return next character               */
+// }                                                           /*  end: getb()                        */
 
+// /*----------------------------------------------------------------------------*/
+// /* Get current date/time and set the system reset time                        */
+// /*----------------------------------------------------------------------------*/
+// void get_time(void)
+// {  time_t t;                           /* Current system time                 */
+//    int c;                              /* Input character                     */
+//    do                                  /* Until end of message                */
+//    {  Serial.println("?T");            /* Send time query to host via USB     */
+//       t = 0;                           /* Initialize time value               */
+//       while ('T' != getb()) ;          /* Watch for start of time response    */
+//       while (('0' <= (c = getb())) && (c <= '9')) /* Is this a decimal digit? */
+//       {  t = 10 * t + (c & 0x0F);      /* If so, build time value             */
+//       }                                /*  end: building time value           */
+//    }  while (c != '!');                /* Until a valid time is received      */
+//    set_time(ss(t));                    /* Calculate and save reset time       */
+// } 
 
 // Recieve commands from serial
 void readConsole()
 {
  if (getting_time)
  {
+   if (Serial.available() > 0)
+   {
+    readByte = Serial.read();
+    if (('0' <= readByte) && (readByte <= '9'))             // Is this a decimal digit?     */
+    {  
+      exposure = 10 * exposure + (readByte & 0x0F);         // If so, build time value             */
+    }                                                       //  end: building time value           */
+    else if (readByte == '!') 
+    {
+      getting_time = false;
+    }       // End time
+   }
 
  }
  else if (Serial.available() > 0)
  {
-  Serial.readBytesUntil('\n', buffer, 7);
-  
   readByte = Serial.read(); // read incoming byte
     
-  switch(readByte){                
+  switch(readByte){      
+    case 'L':                                     // begin Looping
+      Serial.println("Starting looping");
+      looping = true;
+      break;          
+    
     case 'W':                                     // Wake
-      Serial.println(F("Waking up EPC901"));
+      Serial.println(F("Waking up EPC901 (ends Serial)"));
       epcWake();
       break;
+
     case 'S':                                     // Sleep
       Serial.println(F("Bedtime for EPC901"));
       epcSleep();
       break;
+
    case 'R':                                      // Ready status
       Serial.println(F("Checking Ready status:"));
       checkReady(F("terminal"));
       break;
+
    case 'C':                                      // Capture picture
       Serial.println(F("Calling capture()"));
 
       capture(exposure);
       break;
-    case 'E':                                     // set Exposure time
-      Serial.println(F("Enter exposure time [microseconds] up to Y-bits. Enter TXXXX! for XXXX us"));
 
-      //capture(exposure);
+    case 'E':                                     // set Exposure time
+      Serial.println(F("Enter exposure time [microseconds] up to Y-bits. Enter T1000! for 1000 us"));
+      getting_time = true;
+      exposure = 0;
       break;
+
     case 'T':                                     // transmit Picture
       Serial.println(F("Calling readPicture()"));
       readPicture();
       break;
 
-   default:
+    case '2':
      //Serial.begin(115200);
      //Serial.println(F("Calling epcWake() -> capture(1000) -> readPicture() -> epcSleep()"));
      Serial.end();
