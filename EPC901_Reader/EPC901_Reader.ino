@@ -1,9 +1,9 @@
 /*
 See the Software notes document for background information
 */
-#include <Arduino.h>
+//#include <Arduino.h>
 #include <SPI.h>
-#include "EPC901_Reader.h"
+#include "EPC901.h"
 
 #define CHARGE_PUMP // turns the charge pump ON if defined (we want it on)
 //#define BUTTON    // ON = use the button for triggering. OFF = use serial stuff
@@ -19,8 +19,6 @@ See the Software notes document for background information
 // Variable Declarations
 
 const int switchPin = 7; // button pin
-const int shutTime = 10000;
-
 // Breakout Pins
 const uint_least8_t PWR_DOWN = 0;
 const uint_least8_t DATA_RDY = 1; // Turns on charge pump @ start if high, signals there is another frame yet to be read out afterwards
@@ -64,7 +62,7 @@ long exposure = 1000;
 const unsigned long picsize = 256;
 uint16_t picture[picsize];
 
-bool looping = false;       // Flag for looping
+bool looping = true;       // Flag for looping
 bool getting_time;  // Flag for recieving exposure time via serial
 bool success; // Flag for camera success
 byte readByte;
@@ -129,28 +127,6 @@ void loop()
     
   delay(100);
 } 
-
-// static int getb(void)
-// {  while (!(Serial.available() > 0));                       /* Wait for data to arrive             */
-//    return Serial.read();                                    /* Return next character               */
-// }                                                           /*  end: getb()                        */
-
-// /*----------------------------------------------------------------------------*/
-// /* Get current date/time and set the system reset time                        */
-// /*----------------------------------------------------------------------------*/
-// void get_time(void)
-// {  time_t t;                           /* Current system time                 */
-//    int c;                              /* Input character                     */
-//    do                                  /* Until end of message                */
-//    {  Serial.println("?T");            /* Send time query to host via USB     */
-//       t = 0;                           /* Initialize time value               */
-//       while ('T' != getb()) ;          /* Watch for start of time response    */
-//       while (('0' <= (c = getb())) && (c <= '9')) /* Is this a decimal digit? */
-//       {  t = 10 * t + (c & 0x0F);      /* If so, build time value             */
-//       }                                /*  end: building time value           */
-//    }  while (c != '!');                /* Until a valid time is received      */
-//    set_time(ss(t));                    /* Calculate and save reset time       */
-// } 
 
 // Recieve commands from serial
 void readConsole()

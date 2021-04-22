@@ -4,5 +4,6 @@
         "D:\\Arduino\\arduino-1.8.10-windows\\arduino-1.8.10\\hardware\\arduino\\avr\\cores\\arduino\\Arduino.h"
     ],
     "board": "arduino:avr:uno",
-    "output": "build"
+    "output": "build",
+    "port": "COM3"
 }
