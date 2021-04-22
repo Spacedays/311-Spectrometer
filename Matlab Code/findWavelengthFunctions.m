@@ -1,33 +1,85 @@
-%%
-HIGHER = 2; LOWER = 1; % Constants for which peak has greater intensity
-% Example call: 
-pixels =	[60 70	80	90	100 110 120 130 140 ];
-intensity = [5	100 7	6	8	60	500	120	0	];
 
-LAM = [450 700];	% approx peaks of the grow lights
-%% First example (Not ideal; simple peak finding algorithm)
-% [idx_low idx_high] = findDualPeaks(intensity,2,2);
-% wavelength = findWavelength(pixels,[pixels(idx_low) pixels(idx_high)], LAM)
-%plot(wavelength, intensity)
+clear, clc
 
-%% Second example (Ideal; uses Matlab's signal processing toolbox peak finding agorighm)
-[idx_low idx_high] = findDualPeaks2(intensity,2,HIGHER);
-wavelength = findWavelength(pixels,[pixels(idx_low),pixels(idx_high)],LAM);
-figure(2)
-plot(wavelength,intensity)
+port = serialportlist("available");
+disp("Connecting to "+port(end))
+arduinoObj = serialport(port(end), 115200); % Selects the COM port for the Arduino
+% arduinoCom = serial(port(end), 'BaudRate', 115200);
+configureTerminator(arduinoObj, "LF")
+flush(arduinoObj)
+% fopen(arduinoCom)
+% fprintf(arduinoCom, '%s', 'L')
 
-%% Third example (using findTriPeaks2)
-pixels3 =	[60 70	80	90	100 110 120 130 140 150 160 170 180 190 200	210];
-intensity3 = [5	100 7	6	8	60	500	120	0	10	5	10	50	600	250	0];
+load("Data001")
+load('Noise_Profile')
+calibData = @(x) (interp1(Data001(:, 1), Data001(:, 2), x, 'spline'))/100;
+intensityCalib = @(lambda, intensity) intensity/calibData(lambda);
+%writeline(arduinoObj, " 2")
 
-[i_a i_b i_c] = findTriPeaks2(intensity3);
-wavelength3 = findWavelength(pixels3,[pixels3(i_c),pixels3(i_a)]);	% using default LAM values for hydrogen
-figure(3)
-plot(wavelength3,intensity3)
+pixels = 1:256;
+avgLen = 10;
+raw = zeros(256,1);
+idx_reading = 1;
+
+plotData = 1:256;
+
+p = plot(plotData, pixels);
+% axis([150, 1000, -10, 2200])
+
+p.XDataSource = 'pixels';
+p.YDataSource = "plotData";
+title('Relative Intensity vs. Wavelength')
+xlabel('Wavelength [nm]')
+ylabel('Relative Intensity')
+
+while ishghandle(p)
+    idx_sample = 1;
+    while idx_sample <= 256
+        if arduinoObj.NumBytesAvailable>0
+            raw(idx_sample,idx_reading) = str2double(readline(arduinoObj));
+            idx_sample = idx_sample + 1;
+        end
+        pause(0.00001)
+    end
+    idx_reading = idx_reading + 1;
+    if idx_reading > avgLen
+        idx_reading = idx_reading - 1;
+        raw(:,1) = [];
+    end
+    plotData = mean(raw,2)-Noise;
+    refreshdata
+    drawnow
+    % disp("Update")
+    pause(0.01)
+end
+
+p = plot(pixels, plotData);
+selection = questdlg('Use this profile?', 'Figure Closed', 'Yes', 'No', 'Yes');
+switch selection
+    case 'Yes'
+      LAM = [656.3 486.1];	% approx peaks of the grow lights
+      [c_a c_b] = findDualPeaks(plotData,20);
+      wavelength = findWavelength(pixels,[pixels(c_a) pixels(c_b)], LAM);
+      save('Calibrated_Wavelength', 'wavelength');
+    case 'No'
+end
+
+clear arduinoObj
+close all
 
 
-%% functions
-function lambda = findWavelength(pixelArray,calib_idx,LAM)
+
+% %%
+% % Example call: 
+% pixels = 1:1:256;
+% intensity = raw;
+% 
+% LAM = [700 450];	% approx peaks of the grow lights
+% [c_a c_b] = findDualPeaks(intensity,20);
+% wavelength = findWavelength(pixels,[pixels(c_a) pixels(c_b)], LAM);
+
+
+function lambda = findWavelength(idx,calib_idx,LAM)
 % For use with calibration; for hydrogen, i_a  should be the 656nm peak, i_b should be @ 486.1nm,
 % where lambda is the wavelength to be found & idx is the pixel index of the EPC to use
 %
@@ -40,117 +92,55 @@ function lambda = findWavelength(pixelArray,calib_idx,LAM)
 % Relative intensity:	~~1		~~1		~~.4
 %
 % idx: index(es) to convert to wavelength
-% calib_idx: Indeces of two peak wavelengths, in order of wavelength lowest to highest
-% optional arg LAM: LAM(1) = lower wavelength peak, 2 = higher wavelength peak
+% calib_idx: Indeces of two peak wavelengths, in order of wavelength Highest to lowest
 
+% optional arg LAM
 if ~exist('LAM','var')
-	% Use as large of a difference as is feasbile for better accuracy (I think)
-	% 	LAM_ab = 486.1;	% hydrogen main peak 2 [nm]
-	LAM_a = 434.0;	% hydrogen tertiary peak [nm] 	
-	LAM_b = 656.2;	% hydrogen main peak 1 [nm]
-	
+	LAM_a = 656.2;	% hydrogen main peak 1 [nm]
+	LAM_b = 486.1;	% hydrogen main peak 2 [nm]
+%	LAM_c = 434.0;	% hydrogen tertiary peak [nm]
 else
-	LAM_a = LAM(1);	% Lesser wavelength peak
-	LAM_b = LAM(2);	% Greater wavelength peak
+	LAM_a = LAM(1);	% Greater wavelength peak
+	LAM_b = LAM(2);	% Lesser wavelength peak
 end
 
-i_a = calib_idx(1);		% index of lesser wavelength peak
-i_b = calib_idx(2);		% index of greater wavelength peak
+i_a = calib_idx(1);
+i_b = calib_idx(2);
 %i_c = calib_idx(3);
 
-slope = (LAM_b - LAM_a)./ (i_b-i_a);
+slope = (LAM_a - LAM_b)./ (i_a-i_b);
+offset = LAM_b;
 
-offset = LAM_a;
-
-lambda =  slope*(pixelArray-i_a) + offset;
+lambda =  slope*(idx-i_b) + offset;
 end
 
-
-function [idx_low,idx_high] = findDualPeaks2(intensity,peakSpacing,greater)
-% Goal: return the index of the lower wavelength as idx_low USING THE SIGNAL PROCESSING TOOLBOX
-%
-% Assumes there will be a primary and a secondary peak
-% inputs:
-	%   Measurement:	  a				  b
-	%    Wavelength:	 low			 high
-% outputs:
-	%  Rel Intensity:   low/high		low/high
-	%   Pixel index:	i_a/i_b			 i_a/i_b
-%
-% intensity: vector with length of # of pixels
-% peakWidth: exclusion zone on each side of the peak [ number of indeces ]
-% greater: which of the two peaks has a higher intensity. 1 = a (lower wavelength), 2 = b (higher wavelength)
-
-if ~exist('peakSpacing','var')
-	peakSpacing = 4;	% a guess at the maximum peak width we care about
-end
-if ~exist('greater','var')
-	greater = 1;		% Defaults to lower wavelength having a larger peak
-end
-
-[~, idx] = findpeaks(intensity,'MinPeakDistance',peakSpacing,'SortStr','descend');
-
-if(greater == 1)		% lower wavelength has greater intensity
-	idx_low = idx(1);
-	idx_high = idx(2);
-else					% higher wavelength has greater intensity
-	idx_low = idx(2);
-	idx_high = idx(1);
-end
-
-end
-
-function [idx_a,idx_b,idx_c] = findTriPeaks2(intensity,peakSpacing)
-% Goal: return the peak indeces sorted by wavelength, highest to lowest
-%
-% Assumes there will be two primary peaks with a tertiary smaller peak
-% Knowns/inputs:
-	% Measurement:    a		  b		  c
-	%  Wavelength: lowest	middle	highest
-	%   Intensity: lowest    high   high,   where intensity for a,b,c are from the intensity input vector
-% Returns:
-	% Pixel index:	 i_a	 i_b	 i_c
-	
-
-if ~exist('peakSpacing','var')
-	peakSpacing = 4;	% a guess at the maximum peak width we care about
-end
-
-[~, idx] = findpeaks(intensity,'MinPeakDistance',peakSpacing,'SortStr','descend','NPeaks',3);
-idx_a = idx(1);
-idx_b = idx(2);
-idx_c = idx(3);
-
-end
-
-%% Old peak functions
-function [idx_low,idx_high] = findDualPeaks(intensity,peakSpacing,greater)
-% Goal: return the index of the lower wavelength as idx_low
+function [idx_a,idx_b] = findDualPeaks(intensity,peakWidth,greater)
+% Goal: return the index of the higher wavelength as idx_a
 %
 % Assumes there will be two primary peaks with a tertiary smaller peak
 %   Measurement:	  a				  c
-%    Wavelength:	 low			 high
-% Rel Intensity: input var greater  input var greater
+%    Wavelength:	 high			 low
+% Rel Intensity: (VAR)greater    (VAR)greater
 %   Pixel index:	 i_a			 i_b
 %
 % intensity: vector with length of # of pixels
 % peakWidth: exclusion zone on each side of the peak [ number of indeces ]
-% greater: which of the two peaks has a higher intensity. 1 = a (smaller wavelength), 2 = b (larger wavelength)
+% greater: which of the two peaks has a higher intensity. 1 = a (larger wavelength), 2 = b (smaller wavelength)
 
 if ~exist('peakWidth','var')
-	peakSpacing = 7;	% a rather conservative guess at the maximum peak width
+	peakWidth = 7;	% a rather conservative guess at the maximum peak width
 end
-% if ~exist('higher','var')
-% 	greater = 1;		% Defaults to the first provided value being higher
-% end
+if ~exist('higher','var')
+	greater = 1;		% Defaults to the first provided value being higher
+end
 
 % Primary peak & pixel index
 [~, idx(1)] = max(intensity);
-intensity((idx(1)-peakSpacing):(idx(1)+peakSpacing)) = 0;		
+intensity((idx(1)-peakWidth):(idx(1)+peakWidth)) = 0;		
 
 % find bounds for erase zone
-erase_zone_bottom = (idx(1)-peakSpacing);
-erase_zone_top = (idx(1)+peakSpacing);
+erase_zone_bottom = (idx(1)-peakWidth);
+erase_zone_top = (idx(1)+peakWidth);
 
 % correct bounds for erase zone
 if( erase_zone_bottom < 0)
@@ -167,17 +157,17 @@ intensity(erase_zone_bottom:erase_zone_top) = 0;
 [~, idx(2)] = max(intensity);
 
 
-if(greater == 1)		% smaller wavelength has greater intensity
-	idx_low = idx(1);
-	idx_high = idx(2);
-else					% larger wavelength has greater intensity
-	idx_low = idx(2);
-	idx_high = idx(1);
+if(greater == 1)		% larger wavelength has greater intensity
+	idx_a = max(idx);
+	idx_b = min(idx);
+else					% smaller wavelength has greater intensity
+	idx_a = min(idx);
+	idx_b = max(idx);
 end
 
 end
 
-function [idx_a,idx_b,idx_c] = findTriPeaks(intensity,peakSpacing)
+function [idx_a,idx_b,idx_c] = findTriPeaks(intensity,peakWidth)
 % Goal: return the peak indeces sorted by wavelength, highest to lowest
 %
 % Assumes there will be two primary peaks with a tertiary smaller peak
@@ -188,15 +178,15 @@ function [idx_a,idx_b,idx_c] = findTriPeaks(intensity,peakSpacing)
 % intensity: vector with length of # of pixels
 
 if ~exist('peakWidth','var')
-	peakSpacing = 7;	% a rather conservative guess at the maximum peak width
+	peakWidth = 7;	% a rather conservative guess at the maximum peak width
 end
 
 % Primary peak & pixel index
 [values(1), idx(1)] = max(intensity);
 
 % find bounds for erase zone
-erase_zone_bottom = (idx(1)-peakSpacing);
-erase_zone_top = (idx(1)+peakSpacing);
+erase_zone_bottom = (idx(1)-peakWidth);
+erase_zone_top = (idx(1)+peakWidth);
 
 % correct bounds for erase zone
 if( erase_zone_bottom < 0)
@@ -214,8 +204,8 @@ intensity(erase_zone_bottom:erase_zone_top) = 0;		% Erase Primary peak
 
 
 % find bounds for erase zone
-erase_zone_bottom = (idx(2)-peakSpacing);
-erase_zone_top = (idx(2)+peakSpacing);
+erase_zone_bottom = (idx(2)-peakWidth);
+erase_zone_top = (idx(2)+peakWidth);
 
 % correct bounds for erase zone
 if( erase_zone_bottom < 0)

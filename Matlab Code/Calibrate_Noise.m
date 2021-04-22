@@ -1,4 +1,4 @@
-% This is code for taking data off of the Arduino and displaying it
+% This is code to save a noise profile 
 
 clear, clc
 
@@ -13,25 +13,19 @@ flush(arduinoObj)
 
 load("Data001")
 load('Calibrated_Wavelength')
-load('Noise_Profile')
 calibData = @(x) (interp1(Data001(:, 1), Data001(:, 2), x, 'spline'))/100;
 intensityCalib = @(lambda, intensity) intensity/calibData(lambda);
 %writeline(arduinoObj, " 2")
 
-% [RGB, style] = wavelengthToRGB(wavelength)
-
-avgLen = 15;
+avgLen = 100;
 raw = zeros(256,1);
 idx_reading = 1;
 
 plotData = 1:256;
 
 p = plot(plotData, wavelength);
-% axis([150, 1000, -10, 2200])
-
 p.XDataSource = 'wavelength';
 p.YDataSource = "plotData";
-% p.Color = 
 title('Relative Intensity vs. Wavelength')
 xlabel('Wavelength [nm]')
 ylabel('Relative Intensity')
@@ -50,7 +44,7 @@ while ishghandle(p)
         idx_reading = idx_reading - 1;
         raw(:,1) = [];
     end
-    plotData = mean(raw,2)-Noise;
+    plotData = mean(raw,2);
     refreshdata
     drawnow
     % disp("Update")
@@ -58,23 +52,15 @@ while ishghandle(p)
 end
 
 p = plot(wavelength, plotData);
-% axis([150, 1000, -10, 2200])
 title('Relative Intensity vs. Wavelength')
 xlabel('Wavelength [nm]')
 ylabel('Relative Intensity')
 
-selection = questdlg('Save Last Dataset?', 'Figure Closed', 'Yes', 'No', 'Yes');
+selection = questdlg('Use this profile?', 'Figure Closed', 'Yes', 'No', 'Yes');
 switch selection
     case 'Yes'
-      DataSave = [transpose(wavelength) plotData];
-      writematrix(DataSave, input('File Name: ', 's'))
-    case 'No'
-end
-
-selection = questdlg('Save Last Figure?', 'Figure Closed', 'Yes', 'No', 'Yes');
-switch selection
-    case 'Yes'
-      saveas(p, input('Figure Name: ', 's'))
+      Noise = plotData;
+      save('Noise_Profile', 'Noise');
     case 'No'
 end
 
