@@ -1,5 +1,16 @@
 // BUTTON STUFF
 
+// Button Variables
+unsigned long buttonPressStart = 0;
+unsigned long currentButtonTime = 0;
+unsigned long previousButtonTime = 0;
+uint_least8_t buttonInterval = 10; // ms
+bool buttonRead;
+bool buttonState;
+uint_least8_t buttonResult = 0; // 0 = no change, 1 = pressed < 1s (with debounce), 2 = pressed > 1s
+
+buttonState = digitalRead(switchPin); // Read button
+
 // Observe the button pin for changes & return the result
 short int readButton()
 {

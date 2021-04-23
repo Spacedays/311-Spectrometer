@@ -46,15 +46,6 @@ const uint_least8_t READ_DELAY = 3; // us; arbitrarily assigned. note: digitalWr
 unsigned long lastFlush;
 unsigned long lastBufferFlush;
 
-// Button Variables
-unsigned long buttonPressStart = 0;
-unsigned long currentButtonTime = 0;
-unsigned long previousButtonTime = 0;
-uint_least8_t buttonInterval = 10; // ms
-bool buttonRead;
-bool buttonState;
-uint_least8_t buttonResult = 0; // 0 = no change, 1 = pressed < 1s (with debounce), 2 = pressed > 1s
-
 // Camera data & control
 long exposure = 1000;
 const unsigned long picsize = 256;
@@ -85,7 +76,6 @@ void setup()
   adcStart();
   flushBuffer();
 
-  buttonState = digitalRead(switchPin); // Read button
   Serial.begin(115200);
 }
 
