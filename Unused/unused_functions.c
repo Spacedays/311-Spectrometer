@@ -1,3 +1,87 @@
+// BUTTON STUFF
+
+// Observe the button pin for changes & return the result
+short int readButton()
+{
+  currentButtonTime = millis();                                // waiting to read the button requires a time comparison
+  if (currentButtonTime - previousButtonTime > buttonInterval) // compare button refresh time
+  {
+    previousButtonTime = currentButtonTime; // update previousButtonTime
+
+    if (buttonRead == digitalRead(switchPin)) // verify two reads are the same
+    {
+      if (buttonRead != buttonState) // Button State has changed!
+      {
+        buttonState = buttonRead; // Update button state
+        #ifdef DEBUG_BUTTON
+          Serial.println(F("Button Changed"));
+        #endif
+        if (buttonRead == LOW) // if button has been RELEASED
+        {
+          if (currentButtonTime - buttonPressStart < 1000)
+          {
+            buttonResult = 1;
+          } // button has been pressed for < 1s
+          else
+          {
+            buttonResult = 2;
+          }
+        }
+        else // button has been PRESSED
+        {
+          buttonResult = 0;
+          buttonPressStart = millis();
+        }
+      
+      #ifdef DEBUG_BUTTON
+        Serial.println(buttonResult);
+        Serial.println();
+      #endif
+      }
+      else
+      {
+        buttonResult = 0;
+      } // Button State has not changed; do nothing in the switch statement
+    }
+  }
+  return buttonResult;
+}
+
+// Do things from the readButton result
+void buttonSwitch(int buttonResult)
+{
+ switch (buttonResult)
+ {
+ case 1: // single press < 1s
+  #ifdef DEBUG
+    Serial.println(F("Taking a picture"));
+  #endif
+   checkReady(F("While asleep in case 1"));
+   epcWake(); // includes delays
+   capture(exposure);
+
+  #ifdef STATUS_PRINTING
+    Serial.print(F("readPicture() called:\t"));
+  #endif
+   readPicture();
+   epcSleep();
+   //printPicture(picture);
+   break;
+
+ case 2: // single press > 1s
+  #ifdef DEBUG
+    Serial.println(F("Switch case 2 reached: Powering down"));
+  #endif
+
+   checkReady(F("case 2 beginning"));
+   epcSleep();
+   checkReady(F("case 2 end"));
+   break;
+ }
+}
+
+
+// END OF BUTTON STUFF
 unsigned int readADC() // Read 1 byte from adc
 {
   int val = 0x000000000000;     // shown in binary for clarity; the value of the pixel is (val+1)/4096
@@ -21,8 +105,8 @@ unsigned int readADC() // Read 1 byte from adc
   return val;
 }
 
-// OLD bit-banging readPicture
-void readPicture(int picture[]) // pass by reference
+// OLD readPicture
+void readPictureBitBang(int picture[]) // pass by reference
 {
   while (micros() - lastFlush < T_CDS) {} // ensure time to shift to stored pixels has passed
 

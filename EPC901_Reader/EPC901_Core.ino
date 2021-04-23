@@ -1,3 +1,7 @@
+/*
+Core functionality for the EPC901 Sensor using @AStuder's 
+*/
+// Prep all pins for EPC901 startup. Disables Serial to use the DATA_RDY pin. Should be run before every startup
 void runConfig()
 {
   #ifdef CONFIG_PRINTING
@@ -86,17 +90,33 @@ bool isDataReady()
   return digitalRead(DATA_RDY); // HIGH ==> ready
 }
 
+// Calls isDataReady() and prints the status with an inputLocation for debugging. Not safe to call during or around sensor start-up
+void checkReady(String inputLocation)
+{
+  #ifdef STATUS_PRINTING
+    bool readByte = isDataReady();
+    bool isSerialOff = if(!Serial);  
+    Serial.begin(115200);
+    Serial.print(F("Cam has DATA_RDY status "));
+    Serial.print(String(readByte));
+    Serial.print(F(" at "));
+    Serial.println(inputLocation);
+    Serial.print(F("\n"));
+    if (isSerialOff) {Serial.end();}
+  #endif
+}
+
 // Take+Store a picture:
 void capture(long exposure) // exposure time [us]
 {
   //flush(); // clear pixels                  // Seems to work fine without it
   digitalWrite(SHUTTER, HIGH);
-  delayMicroseconds(T_FLUSH + exposure - 7);  // the -7 is a guess at compensating for digitalWrite()
+  delayMicroseconds(T_FLUSH + exposure - 7);  // the -7 is an approximate compensation for digitalWrite()
   digitalWrite(SHUTTER, LOW);
-  //delayMicroseconds(T_SHIFT);
+  //delayMicroseconds(T_SHIFT);               // 
 }
 
-// Starts Serial and does a dummy write
+// Starts Serial and does a dummy write. After execution, ADC is ready for reading
 void adcStart()
 {
   #ifdef CONFIG_PRINTING
