@@ -1,9 +1,8 @@
 #include <Arduino.h>
 #line 1 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
 /*
-See the Software notes document for background information
+Background information is documented in the project report, as well as our team's software notes document
 */
-//#include <Arduino.h>
 #include <SPI.h>
 #include "EPC901.h"
 
@@ -11,18 +10,15 @@ See the Software notes document for background information
 //#define BUTTON    // ON = use the button for triggering. OFF = use serial stuff
 
 #define DEBUG
-//#define STATUS_PRINTING
-//#define CONFIG_PRINTING
-//#define DEBUG_PIXEL
-//#define DEBUG_ADC
+//#define STATUS_PRINTING   // Prints general status messages during operation
+//#define CONFIG_PRINTING   // Prints configuration messages during startup (lots of printing)
+//#define DEBUG_PIXEL       // Prints when a pixel is read                  (lots of printing)
 
-#define NOP __asm__ __volatile__ ("nop\n\t")    // assembly code that does nothing? // should be a smaller delay than delayMicros()
+#define NOP __asm__ __volatile__ ("nop\n\t")    // assembly code that does nothing; should be a smaller delay than delayMicros()
 
 // Variable Declarations
 
 const int switchPin = 7; // button pin
-const int shutTime = 10000;
-
 // Breakout Pins
 const uint_least8_t PWR_DOWN = 0;
 const uint_least8_t DATA_RDY = 1; // Turns on charge pump @ start if high, signals there is another frame yet to be read out afterwards
@@ -44,71 +40,59 @@ const uint_least16_t T_FLUSH = 1;   //889; // us; 30 - 32 EPC cycles ;
 const uint_least16_t T_CDS = 2;     //1028;  // us; 37 EPC cycles
 const uint_least16_t T_SHIFT = 1;   //722; // us; 24-26 EPC cycles
 // T_SHUTTER =  // > 5 EPC clock c-ycles.
-
-const uint_least8_t T_PERIOD_FLUSH = 90; // ms; Should be performed < 100ms ;CLR_PIX pulse should be done frequently
-// T_PULSE_CLR_DATA = 83; //us; 3 oscillator cycles; < 1 arduino cycle
+const uint_least8_t T_PERIOD_FLUSH = 90; // ms; Should be performed < 100ms ;CLR_PIX pulse should be done frequently as well
+// T_PULSE_CLR_DATA = 83; //us; 3 oscillator cycles; < 1 arduino uno cycle, so not necessary
 const uint_least8_t READ_DELAY = 3; // us; arbitrarily assigned. note: digitalWrite() only precise to 4 us & delayMicroseconds() precise above 3us
 
 // #### Timing Variables ####
 unsigned long lastFlush;
 unsigned long lastBufferFlush;
 
-// Button Variables
-unsigned long buttonPressStart = 0;
-unsigned long currentButtonTime = 0;
-unsigned long previousButtonTime = 0;
-uint_least8_t buttonInterval = 10; // ms
-bool buttonRead;
-bool buttonState;
-uint_least8_t buttonResult = 0; // 0 = no change, 1 = pressed < 1s (with debounce), 2 = pressed > 1s
-
+// Camera data & control
 long exposure = 1000;
 const unsigned long picsize = 256;
 uint16_t picture[picsize];
 
-bool looping = true;       // Flag for looping
-bool getting_time;  // Flag for recieving exposure time via serial
-bool success; // Flag for camera success
+// State Control
+bool looping = true;      // Flag for looping to print to matlab. Sensor capture & reading occurs every three loops 
+bool getting_time;        // Flag for recieving exposure time via serial
+bool success;             // Flag for camera success
 byte readByte;
-uint_least8_t cameraState = 0; // 0 = asleep, 1 = active
+uint_least8_t cameraState = 0;  // 0 = asleep, 1 = active. currently only used for debugging
 
-#line 73 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+#line 61 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
 void setup();
-#line 96 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+#line 83 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
 void loop();
-#line 134 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+#line 120 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
 void readConsole();
-#line 224 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-short int readButton();
-#line 271 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-void buttonSwitch(int buttonResult);
-#line 305 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-void checkReady(String input);
-#line 320 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+#line 187 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
 void printPicture();
-#line 1 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+#line 5 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
 void runConfig();
-#line 44 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+#line 48 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
 void epcWake();
-#line 56 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+#line 60 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
 void epcSleep();
-#line 64 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+#line 68 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
 void flush();
-#line 74 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+#line 78 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
 void flushBuffer();
-#line 84 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+#line 88 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
 bool isDataReady();
-#line 90 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+#line 94 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+void checkReady(String inputLocation);
+#line 110 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
 void capture(long exposure);
-#line 100 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+#line 120 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
 void adcStart();
-#line 122 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+#line 142 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
 uint_least8_t readPixel();
-#line 148 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+#line 168 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
 uint16_t readPixelBig();
-#line 174 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+#line 194 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
 bool readPicture();
-#line 73 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+#line 61 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
 void setup()
 {
   pinMode(switchPin, INPUT);
@@ -127,14 +111,12 @@ void setup()
   adcStart();
   flushBuffer();
 
-  buttonState = digitalRead(switchPin); // Read button
   Serial.begin(115200);
 }
 
 unsigned long loops = 0;
 void loop()
 {
-  //if(!Serial){Serial.begin(115200);}
   loops++;
 
   if (millis() - lastFlush > T_PERIOD_FLUSH) // flush check
@@ -232,127 +214,8 @@ void readConsole()
       getting_time = true;
       exposure = 0;
       break;
-
-
-    case '2':
-     //Serial.begin(115200);
-     //Serial.println(F("Calling epcWake() -> capture(1000) -> readPicture() -> epcSleep()"));
-     Serial.end();
-     pinMode(DATA_RDY, INPUT);
-     delay(100);
-     epcWake();
-     
-     capture(exposure);
-     
-     bool captured = readPicture();
- 
-     delay(10);
-     Serial.begin(115200);
-    
-     if (captured)
-     {
-       //Serial.println(F("Image captured"));
-       printPicture();
-     }
-    break;
    }
  }
-}
-
-// Observe the button pin for changes & return the result
-short int readButton()
-{
-  currentButtonTime = millis();                                // waiting to read the button requires a time comparison
-  if (currentButtonTime - previousButtonTime > buttonInterval) // compare button refresh time
-  {
-    previousButtonTime = currentButtonTime; // update previousButtonTime
-
-    if (buttonRead == digitalRead(switchPin)) // verify two reads are the same
-    {
-      if (buttonRead != buttonState) // Button State has changed!
-      {
-        buttonState = buttonRead; // Update button state
-        #ifdef DEBUG_BUTTON
-          Serial.println(F("Button Changed"));
-        #endif
-        if (buttonRead == LOW) // if button has been RELEASED
-        {
-          if (currentButtonTime - buttonPressStart < 1000)
-          {
-            buttonResult = 1;
-          } // button has been pressed for < 1s
-          else
-          {
-            buttonResult = 2;
-          }
-        }
-        else // button has been PRESSED
-        {
-          buttonResult = 0;
-          buttonPressStart = millis();
-        }
-      
-      #ifdef DEBUG_BUTTON
-        Serial.println(buttonResult);
-        Serial.println();
-      #endif
-      }
-      else
-      {
-        buttonResult = 0;
-      } // Button State has not changed; do nothing in the switch statement
-    }
-  }
-  return buttonResult;
-}
-
-// Do things from the readButton result
-void buttonSwitch(int buttonResult)
-{
- switch (buttonResult)
- {
- case 1: // single press < 1s
-  #ifdef DEBUG
-    Serial.println(F("Taking a picture"));
-  #endif
-   checkReady(F("While asleep in case 1"));
-   epcWake(); // includes delays
-   capture(exposure);
-
-  #ifdef STATUS_PRINTING
-    Serial.print(F("readPicture() called:\t"));
-  #endif
-   readPicture();
-   epcSleep();
-   //printPicture(picture);
-   break;
-
- case 2: // single press > 1s
-  #ifdef DEBUG
-    Serial.println(F("Switch case 2 reached: Powering down"));
-  #endif
-
-   checkReady(F("case 2 beginning"));
-   epcSleep();
-   checkReady(F("case 2 end"));
-   break;
- }
-}
-
-
-
-void checkReady(String input)
-{
-  #ifdef STATUS_PRINTING
-    bool readByte = isDataReady();
-    Serial.begin(115200);
-    Serial.print(F("Cam has DATA_RDY status "));
-    Serial.print(String(readByte));
-    Serial.print(F(" at "));
-    Serial.println(input);
-    Serial.print(F("\n"));
-    //Serial.end();
-  #endif
 }
 
 // Print Picture IF STORED IN ARRAY
@@ -361,13 +224,19 @@ void printPicture()
   for (unsigned int i = 0; i < picsize; i++)
   {
     Serial.println(picture[i]); // send value
+    /*  Sent as a part of the Serial.print() function, but can be explicitly called using Serial.print() instead. Uses more memory.
     //Serial.write(13);  // carriage return
     //Serial.write(10);  // linefeed
+    */
   }
   Serial.flush();
 }
 
 #line 1 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+/*
+Core functionality for the EPC901 Sensor using @AStuder's 
+*/
+// Prep all pins for EPC901 startup. Disables Serial to use the DATA_RDY pin. Should be run before every startup
 void runConfig()
 {
   #ifdef CONFIG_PRINTING
@@ -456,17 +325,33 @@ bool isDataReady()
   return digitalRead(DATA_RDY); // HIGH ==> ready
 }
 
+// Calls isDataReady() and prints the status with an inputLocation for debugging. Not safe to call during or around sensor start-up
+void checkReady(String inputLocation)
+{
+  #ifdef STATUS_PRINTING
+    bool readByte = isDataReady();
+    bool isSerialOff = if(!Serial);  
+    Serial.begin(115200);
+    Serial.print(F("Cam has DATA_RDY status "));
+    Serial.print(String(readByte));
+    Serial.print(F(" at "));
+    Serial.println(inputLocation);
+    Serial.print(F("\n"));
+    if (isSerialOff) {Serial.end();}
+  #endif
+}
+
 // Take+Store a picture:
 void capture(long exposure) // exposure time [us]
 {
   //flush(); // clear pixels                  // Seems to work fine without it
   digitalWrite(SHUTTER, HIGH);
-  delayMicroseconds(T_FLUSH + exposure - 7);  // the -7 is a guess at compensating for digitalWrite()
+  delayMicroseconds(T_FLUSH + exposure - 7);  // the -7 is an approximate compensation for digitalWrite()
   digitalWrite(SHUTTER, LOW);
-  //delayMicroseconds(T_SHIFT);
+  //delayMicroseconds(T_SHIFT);               // 
 }
 
-// Starts Serial and does a dummy write
+// Starts Serial and does a dummy write. After execution, ADC is ready for reading
 void adcStart()
 {
   #ifdef CONFIG_PRINTING

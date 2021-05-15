@@ -1,30 +1,26 @@
 # 1 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
 /*
 
-See the Software notes document for background information
+Background information is documented in the project report, as well as our team's software notes document
 
 */
 # 4 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-//#include <Arduino.h>
+# 5 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 2
 # 6 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 2
-# 7 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 2
 
 
 //#define BUTTON    // ON = use the button for triggering. OFF = use serial stuff
 
 
-//#define STATUS_PRINTING
-//#define CONFIG_PRINTING
-//#define DEBUG_PIXEL
-//#define DEBUG_ADC
+//#define STATUS_PRINTING   // Prints general status messages during operation
+//#define CONFIG_PRINTING   // Prints configuration messages during startup (lots of printing)
+//#define DEBUG_PIXEL       // Prints when a pixel is read                  (lots of printing)
 
 
 
 // Variable Declarations
 
 const int switchPin = 7; // button pin
-const int shutTime = 10000;
-
 // Breakout Pins
 const uint_least8_t PWR_DOWN = 0;
 const uint_least8_t DATA_RDY = 1; // Turns on charge pump @ start if high, signals there is another frame yet to be read out afterwards
@@ -46,33 +42,25 @@ const uint_least16_t T_FLUSH = 1; //889; // us; 30 - 32 EPC cycles ;
 const uint_least16_t T_CDS = 2; //1028;  // us; 37 EPC cycles
 const uint_least16_t T_SHIFT = 1; //722; // us; 24-26 EPC cycles
 // T_SHUTTER =  // > 5 EPC clock c-ycles.
-
-const uint_least8_t T_PERIOD_FLUSH = 90; // ms; Should be performed < 100ms ;CLR_PIX pulse should be done frequently
-// T_PULSE_CLR_DATA = 83; //us; 3 oscillator cycles; < 1 arduino cycle
+const uint_least8_t T_PERIOD_FLUSH = 90; // ms; Should be performed < 100ms ;CLR_PIX pulse should be done frequently as well
+// T_PULSE_CLR_DATA = 83; //us; 3 oscillator cycles; < 1 arduino uno cycle, so not necessary
 const uint_least8_t READ_DELAY = 3; // us; arbitrarily assigned. note: digitalWrite() only precise to 4 us & delayMicroseconds() precise above 3us
 
 // #### Timing Variables ####
 unsigned long lastFlush;
 unsigned long lastBufferFlush;
 
-// Button Variables
-unsigned long buttonPressStart = 0;
-unsigned long currentButtonTime = 0;
-unsigned long previousButtonTime = 0;
-uint_least8_t buttonInterval = 10; // ms
-bool buttonRead;
-bool buttonState;
-uint_least8_t buttonResult = 0; // 0 = no change, 1 = pressed < 1s (with debounce), 2 = pressed > 1s
-
+// Camera data & control
 long exposure = 1000;
 const unsigned long picsize = 256;
 uint16_t picture[picsize];
 
-bool looping = true; // Flag for looping
+// State Control
+bool looping = true; // Flag for looping to print to matlab. Sensor capture & reading occurs every three loops 
 bool getting_time; // Flag for recieving exposure time via serial
 bool success; // Flag for camera success
 byte readByte;
-uint_least8_t cameraState = 0; // 0 = asleep, 1 = active
+uint_least8_t cameraState = 0; // 0 = asleep, 1 = active. currently only used for debugging
 
 void setup()
 {
@@ -92,14 +80,12 @@ void setup()
   adcStart();
   flushBuffer();
 
-  buttonState = digitalRead(switchPin); // Read button
   Serial.begin(115200);
 }
 
 unsigned long loops = 0;
 void loop()
 {
-  //if(!Serial){Serial.begin(115200);}
   loops++;
 
   if (millis() - lastFlush > T_PERIOD_FLUSH) // flush check
@@ -162,86 +148,86 @@ void readConsole()
   switch(readByte){
     case 'L': // begin Looping
       Serial.println((reinterpret_cast<const __FlashStringHelper *>(
-# 160 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 146 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 160 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 146 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     "Starting looping"
-# 160 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 146 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     ); &__c[0];}))
-# 160 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 146 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     )));
       looping = true;
       break;
 
     case 'Q': // begin Looping
       Serial.println((reinterpret_cast<const __FlashStringHelper *>(
-# 165 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 151 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 165 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 151 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     "Quitting looping"
-# 165 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 151 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     ); &__c[0];}))
-# 165 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 151 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     )));
       looping = false;
       break;
 
     case 'W': // Wake
       Serial.println((reinterpret_cast<const __FlashStringHelper *>(
-# 170 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 156 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 170 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 156 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     "Waking up EPC901 (ends Serial)"
-# 170 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 156 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     ); &__c[0];}))
-# 170 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 156 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     )));
       epcWake();
       break;
 
     case 'S': // Sleep
       Serial.println((reinterpret_cast<const __FlashStringHelper *>(
-# 175 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 161 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 175 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 161 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     "Bedtime for EPC901"
-# 175 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 161 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     ); &__c[0];}))
-# 175 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 161 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     )));
       epcSleep();
       break;
 
    case 'R': // Ready status
       Serial.println((reinterpret_cast<const __FlashStringHelper *>(
-# 180 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 166 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 180 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 166 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     "Checking Ready status:"
-# 180 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 166 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     ); &__c[0];}))
-# 180 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 166 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     )));
       checkReady((reinterpret_cast<const __FlashStringHelper *>(
-# 181 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 167 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                 (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 181 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 167 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                 "terminal"
-# 181 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 167 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                 ); &__c[0];}))
-# 181 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 167 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                 )));
       break;
 
    case 'C': // Capture picture
       Serial.println((reinterpret_cast<const __FlashStringHelper *>(
-# 185 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 171 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 185 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 171 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     "Calling capture() and readPicture()"
-# 185 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 171 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     ); &__c[0];}))
-# 185 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 171 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     )));
       capture(exposure);
       readPicture();
@@ -250,169 +236,19 @@ void readConsole()
 
     case 'E': // set Exposure time
       Serial.println((reinterpret_cast<const __FlashStringHelper *>(
-# 192 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 178 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 192 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 178 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     "Enter exposure time [microseconds] up to ?-bits. Enter 1000! for 1000 us"
-# 192 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
+# 178 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
                     ); &__c[0];}))
-# 192 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
+# 178 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
                     )));
       getting_time = true;
       exposure = 0;
       break;
-
-
-    case '2':
-     //Serial.begin(115200);
-     //Serial.println(F("Calling epcWake() -> capture(1000) -> readPicture() -> epcSleep()"));
-     Serial.end();
-     pinMode(DATA_RDY, 0x0);
-     delay(100);
-     epcWake();
-
-     capture(exposure);
-
-     bool captured = readPicture();
-
-     delay(10);
-     Serial.begin(115200);
-
-     if (captured)
-     {
-       //Serial.println(F("Image captured"));
-       printPicture();
-     }
-    break;
    }
  }
-}
-
-// Observe the button pin for changes & return the result
-short int readButton()
-{
-  currentButtonTime = millis(); // waiting to read the button requires a time comparison
-  if (currentButtonTime - previousButtonTime > buttonInterval) // compare button refresh time
-  {
-    previousButtonTime = currentButtonTime; // update previousButtonTime
-
-    if (buttonRead == digitalRead(switchPin)) // verify two reads are the same
-    {
-      if (buttonRead != buttonState) // Button State has changed!
-      {
-        buttonState = buttonRead; // Update button state
-
-
-
-        if (buttonRead == 0x0) // if button has been RELEASED
-        {
-          if (currentButtonTime - buttonPressStart < 1000)
-          {
-            buttonResult = 1;
-          } // button has been pressed for < 1s
-          else
-          {
-            buttonResult = 2;
-          }
-        }
-        else // button has been PRESSED
-        {
-          buttonResult = 0;
-          buttonPressStart = millis();
-        }
-
-
-
-
-
-      }
-      else
-      {
-        buttonResult = 0;
-      } // Button State has not changed; do nothing in the switch statement
-    }
-  }
-  return buttonResult;
-}
-
-// Do things from the readButton result
-void buttonSwitch(int buttonResult)
-{
- switch (buttonResult)
- {
- case 1: // single press < 1s
-
-    Serial.println((reinterpret_cast<const __FlashStringHelper *>(
-# 277 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
-                  (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 277 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-                  "Taking a picture"
-# 277 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
-                  ); &__c[0];}))
-# 277 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-                  )));
-
-   checkReady((reinterpret_cast<const __FlashStringHelper *>(
-# 279 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
-             (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 279 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-             "While asleep in case 1"
-# 279 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
-             ); &__c[0];}))
-# 279 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-             )));
-   epcWake(); // includes delays
-   capture(exposure);
-
-
-
-
-   readPicture();
-   epcSleep();
-   //printPicture(picture);
-   break;
-
- case 2: // single press > 1s
-
-    Serial.println((reinterpret_cast<const __FlashStringHelper *>(
-# 293 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
-                  (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 293 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-                  "Switch case 2 reached: Powering down"
-# 293 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
-                  ); &__c[0];}))
-# 293 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-                  )));
-
-
-   checkReady((reinterpret_cast<const __FlashStringHelper *>(
-# 296 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
-             (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 296 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-             "case 2 beginning"
-# 296 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
-             ); &__c[0];}))
-# 296 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-             )));
-   epcSleep();
-   checkReady((reinterpret_cast<const __FlashStringHelper *>(
-# 298 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
-             (__extension__({static const char __c[] __attribute__((__progmem__)) = (
-# 298 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-             "case 2 end"
-# 298 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino" 3
-             ); &__c[0];}))
-# 298 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
-             )));
-   break;
- }
-}
-
-
-
-void checkReady(String input)
-{
-# 317 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
 }
 
 // Print Picture IF STORED IN ARRAY
@@ -421,12 +257,25 @@ void printPicture()
   for (unsigned int i = 0; i < picsize; i++)
   {
     Serial.println(picture[i]); // send value
+    /*  Sent as a part of the Serial.print() function, but can be explicitly called using Serial.print() instead. Uses more memory.
+
     //Serial.write(13);  // carriage return
+
     //Serial.write(10);  // linefeed
+
+    */
+# 196 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Reader.ino"
   }
   Serial.flush();
 }
 # 1 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+/*
+
+Core functionality for the EPC901 Sensor using @AStuder's 
+
+*/
+# 4 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+// Prep all pins for EPC901 startup. Disables Serial to use the DATA_RDY pin. Should be run before every startup
 void runConfig()
 {
 
@@ -515,17 +364,23 @@ bool isDataReady()
   return digitalRead(DATA_RDY); // HIGH ==> ready
 }
 
+// Calls isDataReady() and prints the status with an inputLocation for debugging. Not safe to call during or around sensor start-up
+void checkReady(String inputLocation)
+{
+# 107 "c:\\Github\\311-Spectrometer\\EPC901_Reader\\EPC901_Core.ino"
+}
+
 // Take+Store a picture:
 void capture(long exposure) // exposure time [us]
 {
   //flush(); // clear pixels                  // Seems to work fine without it
   digitalWrite(SHUTTER, 0x1);
-  delayMicroseconds(T_FLUSH + exposure - 7); // the -7 is a guess at compensating for digitalWrite()
+  delayMicroseconds(T_FLUSH + exposure - 7); // the -7 is an approximate compensation for digitalWrite()
   digitalWrite(SHUTTER, 0x0);
-  //delayMicroseconds(T_SHIFT);
+  //delayMicroseconds(T_SHIFT);               // 
 }
 
-// Starts Serial and does a dummy write
+// Starts Serial and does a dummy write. After execution, ADC is ready for reading
 void adcStart()
 {
 
@@ -635,7 +490,7 @@ bool readPicture() //int picture[]) // pass by reference
   for (unsigned long i = 0; i < 1024; i++)
   {
     digitalWrite(READ, 0x1);
-    __asm__ __volatile__ ("nop\n\t") /* assembly code that does nothing? // should be a smaller delay than delayMicros()*/; __asm__ __volatile__ ("nop\n\t") /* assembly code that does nothing? // should be a smaller delay than delayMicros()*/; // in theory gets a smaller delay than micros, might not be necessary
+    __asm__ __volatile__ ("nop\n\t") /* assembly code that does nothing; should be a smaller delay than delayMicros()*/; __asm__ __volatile__ ("nop\n\t") /* assembly code that does nothing; should be a smaller delay than delayMicros()*/; // in theory gets a smaller delay than micros, might not be necessary
     digitalWrite(READ, 0x0);
     //delayMicroseconds(3);
     if (i >= 384 && i < 640)
