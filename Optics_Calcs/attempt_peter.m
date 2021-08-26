@@ -11,8 +11,8 @@ t = d*n/(3*10^8);    % t = d*n/c, where n=1.5 (refractive idx of glass) and c = 
 
 % a = @(n_2,th_1) 
 
-OPL_eqn = @(n_2,th_1) (d ./ (cosd(asind(sind(th_1)./n_2) ) ) ) .* n_2 + ...
-    t - (d./(cosd(asind(sind(th_1) ./ n_2) ) ) ) .* (cosd(th_1 - asind(sind(th_1)./ n_2))./1);
+OPD = @(th) ( (0.2*10^-6)./(cosd(asind(sind(th) / 1.5) ) ) ) .* (1.5 - (cosd(th - asind(sind(th) / 1.5) )/1) ) ;
+
 % f1 = OPL_eqn
 
 % f100 = @(n_2) OPL_eqn(n_2,theta) - 100;
